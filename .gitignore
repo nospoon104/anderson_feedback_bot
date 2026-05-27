@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.idea/
+.vscode/
+alembic/__pycache__/
+alembic/versions/__pycache__/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+
