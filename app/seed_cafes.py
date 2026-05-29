@@ -7,9 +7,79 @@ from app.schemas.cafe import CafeCreateSchema
 
 CAFES_TO_SEED = [
     {
-        "name": "Андерсон Таганская",
-        "code": "cafe_taganka",
-        "address": "ул. Центральная, 1",
+        "name": "АндерСон Таганская 36",
+        "code": "cafe_taganskaya_36",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Авеню",
+        "code": "cafe_avenyu",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Братиславская",
+        "code": "cafe_bratislavskaya",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Бутово",
+        "code": "cafe_butovo",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Гагаринский",
+        "code": "cafe_gagarinskiy",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Гиляровского",
+        "code": "cafe_gilyarovskogo",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Домодедово",
+        "code": "cafe_domodedovo",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Кусковская",
+        "code": "cafe_kuskovskaya",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Каскад",
+        "code": "cafe_kaskad",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Медведково",
+        "code": "cafe_medvedkovo",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Мичуринский",
+        "code": "cafe_michurinskiy",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Обручева",
+        "code": "cafe_obrucheva",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Островитянова",
+        "code": "cafe_ostrovityanova",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Сокол",
+        "code": "cafe_sokol",
+        "address": "-",
+    },
+    {
+        "name": "АндерСон Царицыно",
+        "code": "cafe_tsaritsyno",
+        "address": "-",
     },
 ]
 
