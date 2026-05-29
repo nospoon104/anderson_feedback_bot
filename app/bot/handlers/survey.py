@@ -4,7 +4,11 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 
-from app.bot.keyboards.survey import skip_comment_keyboard, yes_no_keyboard
+from app.bot.keyboards.survey import (
+    skip_comment_keyboard,
+    yes_no_keyboard,
+    cancel_keyboard,
+)
 from app.bot.states.survey import SurveyStates
 from app.core.constants import ROLE_MANAGER, SURVEY_QUESTIONS
 from app.db.repositories.user_repository import UserRepository
@@ -50,7 +54,7 @@ async def start_survey(message: Message, state: FSMContext) -> None:
     await message.answer(
         "Введите дату и время визита в формате ДД.ММ.ГГГГ ЧЧ:ММ\n"
         "Например: 28.05.2026 19:30",
-        reply_markup=ReplyKeyboardRemove(),
+        reply_markup=cancel_keyboard(),
     )
     await state.set_state(SurveyStates.waiting_for_visit_datetime)
 
@@ -68,7 +72,7 @@ async def process_visit_datetime(message: Message, state: FSMContext) -> None:
         return
 
     await state.update_data(visit_datetime=visit_datetime.isoformat())
-    await message.answer("Введите номер стола:")
+    await message.answer("Введите номер стола:", reply_markup=cancel_keyboard())
     await state.set_state(SurveyStates.waiting_for_table_number)
 
 
