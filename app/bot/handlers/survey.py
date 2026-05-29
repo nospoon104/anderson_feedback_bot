@@ -12,6 +12,7 @@ from app.db.repositories.survey_repository import SurveyRepository
 from app.db.session import AsyncSessionLocal
 from app.services.auth_service import AuthService
 from app.services.survey_service import SurveyService
+from app.bot.keyboards.common import manager_main_keyboard
 
 router = Router()
 
@@ -193,5 +194,20 @@ async def process_comment(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
         f"Анкета сохранена. ID анкеты: {survey.id}",
+        reply_markup=manager_main_keyboard(),
+    )
+
+
+@router.message(F.text == "/cancel")
+@router.message(F.text == "Отмена")
+async def cancel_survey(message: Message, state: FSMContext) -> None:
+    current_state = await state.get_state()
+    if current_state is None:
+        await message.answer("Сейчас нет активного ввода анкеты.")
+        return
+
+    await state.clear()
+    await message.answer(
+        "Ввод анкеты отменён.",
         reply_markup=manager_main_keyboard(),
     )
