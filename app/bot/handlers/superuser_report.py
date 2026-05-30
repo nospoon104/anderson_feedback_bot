@@ -28,27 +28,29 @@ def parse_date(date_text: str) -> date | None:
 def format_report_text(report) -> str:
     lines = [
         f"Отчёт по кафе ID: {report.cafe_id}",
-        f"Период: {report.period.start_date} -> {report.period.end_date}",
+        f"Период: {report.period.start_date:%d.%m.%Y} - {report.period.end_date:%d.%m.%Y}",
+        "",
         f"Всего анкет: {report.summary.total_surveys}",
         f"Средний балл: {report.summary.average_score:.2f}",
         f"Средний процент: {report.summary.average_percent:.2f}%",
         "",
         "По вопросам:",
-        f"Q1: да={report.q1_stats.yes_count}, нет={report.q1_stats.no_count}, "
-        f"yes%={report.q1_stats.yes_percent:.2f}",
-        f"Q2: да={report.q2_stats.yes_count}, нет={report.q2_stats.no_count}, "
-        f"yes%={report.q2_stats.yes_percent:.2f}",
-        f"Q3: да={report.q3_stats.yes_count}, нет={report.q3_stats.no_count}, "
-        f"yes%={report.q3_stats.yes_percent:.2f}",
-        f"Q4: да={report.q4_stats.yes_count}, нет={report.q4_stats.no_count}, "
-        f"yes%={report.q4_stats.yes_percent:.2f}",
+        f"Q1: да={report.q1_stats.yes_count}, нет={report.q1_stats.no_count}, да%={report.q1_stats.yes_percent:.2f}",
+        f"Q2: да={report.q2_stats.yes_count}, нет={report.q2_stats.no_count}, да%={report.q2_stats.yes_percent:.2f}",
+        f"Q3: да={report.q3_stats.yes_count}, нет={report.q3_stats.no_count}, да%={report.q3_stats.yes_percent:.2f}",
+        f"Q4: да={report.q4_stats.yes_count}, нет={report.q4_stats.no_count}, да%={report.q4_stats.yes_percent:.2f}",
         "",
         "Распределение оценок:",
-        f"100%: {report.score_distribution.percent_100}",
-        f"75%: {report.score_distribution.percent_75}",
-        f"50%: {report.score_distribution.percent_50}",
-        f"25%: {report.score_distribution.percent_25}",
-        f"0%: {report.score_distribution.percent_0}",
+        f"100%: {report.summary.distribution.score_100_count}",
+        f"75%: {report.summary.distribution.score_75_count}",
+        f"50%: {report.summary.distribution.score_50_count}",
+        f"25%: {report.summary.distribution.score_25_count}",
+        f"0%: {report.summary.distribution.score_0_count}",
+        "",
+        "Сравнение с предыдущим периодом:",
+        f"Текущий период: {report.comparison.current_average_percent:.2f}%",
+        f"Предыдущий период: {report.comparison.previous_average_percent:.2f}%",
+        f"Разница: {report.comparison.delta_percent_points:.2f} п.п.",
     ]
     return "\n".join(lines)
 
@@ -95,7 +97,7 @@ async def start_superuser_report(message: Message, state: FSMContext) -> None:
 async def process_cafe_id(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
     if not text.isdigit():
-        await message.answer("Введите корректный numeric cafe_id.")
+        await message.answer("Введите корректный числовой ID кафе.")
         return
 
     cafe_id = int(text)

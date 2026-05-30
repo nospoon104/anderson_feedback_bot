@@ -1,9 +1,12 @@
 from datetime import datetime, timedelta
 
 from app.db.models import Survey
+from app.db.repositories.cafe_repository import CafeRepository
 from app.db.repositories.survey_repository import SurveyRepository
 from app.schemas.report import (
     CafeReportSchema,
+    CafeShortReportSchema,
+    NetworkReportSchema,
     QuestionStatsSchema,
     ReportComparisonSchema,
     ReportPeriodSchema,
@@ -13,8 +16,13 @@ from app.schemas.report import (
 
 
 class ReportService:
-    def __init__(self, survey_repository: SurveyRepository):
+    def __init__(
+        self,
+        survey_repository: SurveyRepository,
+        cafe_repository: CafeRepository | None = None,
+    ):
         self.survey_repository = survey_repository
+        self.cafe_repository = cafe_repository
 
     @staticmethod
     def calculate_survey_score(survey: Survey) -> int:
@@ -79,7 +87,8 @@ class ReportService:
 
     @staticmethod
     def get_previous_period(
-        start_date: datetime, end_date: datetime
+        start_date: datetime,
+        end_date: datetime,
     ) -> tuple[datetime, datetime]:
         delta = end_date - start_date
         previous_end = start_date - timedelta(seconds=1)
@@ -117,7 +126,8 @@ class ReportService:
             current_average_percent=summary.average_percent,
             previous_average_percent=previous_summary.average_percent,
             delta_percent_points=round(
-                summary.average_percent - previous_summary.average_percent, 2
+                summary.average_percent - previous_summary.average_percent,
+                2,
             ),
         )
 
@@ -133,4 +143,68 @@ class ReportService:
             q3_stats=q3_stats,
             q4_stats=q4_stats,
             comparison=comparison,
+        )
+
+    async def build_network_report(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> NetworkReportSchema:
+        if self.cafe_repository is None:
+            raise ValueError("CafeRepository is required for network report")
+
+        cafes = await self.cafe_repository.list_all()
+
+        all_surveys: list[Survey] = []
+        cafe_reports: list[CafeShortReportSchema] = []
+
+        for cafe in cafes:
+            cafe_surveys = await self.survey_repository.list_by_cafe_and_period(
+                cafe_id=cafe.id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+            all_surveys.extend(cafe_surveys)
+            cafe_summary = self.calculate_summary(cafe_surveys)
+
+            cafe_reports.append(
+                CafeShortReportSchema(
+                    cafe_id=cafe.id,
+                    cafe_name=cafe.name,
+                    total_surveys=cafe_summary.total_surveys,
+                    average_percent=cafe_summary.average_percent,
+                )
+            )
+
+        cafe_reports.sort(
+            key=lambda cafe_report: (
+                cafe_report.average_percent,
+                cafe_report.total_surveys,
+            ),
+            reverse=True,
+        )
+
+        summary = self.calculate_summary(all_surveys)
+
+        q1_stats = self.calculate_question_stats([survey.q1 for survey in all_surveys])
+        q2_stats = self.calculate_question_stats([survey.q2 for survey in all_surveys])
+        q3_stats = self.calculate_question_stats([survey.q3 for survey in all_surveys])
+        q4_stats = self.calculate_question_stats([survey.q4 for survey in all_surveys])
+
+        return NetworkReportSchema(
+            period=ReportPeriodSchema(
+                start_date=start_date,
+                end_date=end_date,
+            ),
+            total_cafes=len(cafes),
+            total_surveys=summary.total_surveys,
+            average_score=summary.average_score,
+            average_percent=summary.average_percent,
+            distribution=summary.distribution,
+            q1_stats=q1_stats,
+            q2_stats=q2_stats,
+            q3_stats=q3_stats,
+            q4_stats=q4_stats,
+            cafes=cafe_reports,
         )

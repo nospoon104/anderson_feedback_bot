@@ -44,3 +44,24 @@ class CafeReportSchema(BaseModel):
     q3_stats: QuestionStatsSchema
     q4_stats: QuestionStatsSchema
     comparison: ReportComparisonSchema | None = None
+
+
+class CafeShortReportSchema(BaseModel):
+    cafe_id: int
+    cafe_name: str
+    total_surveys: int
+    average_percent: float
+
+
+class NetworkReportSchema(BaseModel):
+    period: ReportPeriodSchema
+    total_cafes: int
+    total_surveys: int
+    average_score: float
+    average_percent: float
+    distribution: ScoreDistributionSchema
+    q1_stats: QuestionStatsSchema
+    q2_stats: QuestionStatsSchema
+    q3_stats: QuestionStatsSchema
+    q4_stats: QuestionStatsSchema
+    cafes: list[CafeShortReportSchema]

@@ -2,21 +2,21 @@ from datetime import datetime
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardRemove
+from aiogram.types import Message
 
+from app.bot.keyboards.common import manager_main_keyboard
 from app.bot.keyboards.survey import (
+    cancel_keyboard,
     skip_comment_keyboard,
     yes_no_keyboard,
-    cancel_keyboard,
 )
 from app.bot.states.survey import SurveyStates
 from app.core.constants import ROLE_MANAGER, SURVEY_QUESTIONS
-from app.db.repositories.user_repository import UserRepository
 from app.db.repositories.survey_repository import SurveyRepository
+from app.db.repositories.user_repository import UserRepository
 from app.db.session import AsyncSessionLocal
 from app.services.auth_service import AuthService
 from app.services.survey_service import SurveyService
-from app.bot.keyboards.common import manager_main_keyboard
 
 router = Router()
 
@@ -28,6 +28,42 @@ def parse_yes_no(text: str) -> bool | None:
     if normalized == "нет":
         return False
     return None
+
+
+@router.message(
+    SurveyStates.waiting_for_visit_datetime,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+@router.message(
+    SurveyStates.waiting_for_table_number,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+@router.message(
+    SurveyStates.waiting_for_q1,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+@router.message(
+    SurveyStates.waiting_for_q2,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+@router.message(
+    SurveyStates.waiting_for_q3,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+@router.message(
+    SurveyStates.waiting_for_q4,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+@router.message(
+    SurveyStates.waiting_for_comment,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+async def cancel_survey(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "Ввод анкеты отменён.",
+        reply_markup=manager_main_keyboard(),
+    )
 
 
 @router.message(F.text == "Добавить анкету")
@@ -67,7 +103,8 @@ async def process_visit_datetime(message: Message, state: FSMContext) -> None:
         visit_datetime = datetime.strptime(text, "%d.%m.%Y %H:%M")
     except ValueError:
         await message.answer(
-            "Неверный формат даты.\n" "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ"
+            "Неверный формат даты.\n" "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ",
+            reply_markup=cancel_keyboard(),
         )
         return
 
@@ -81,7 +118,10 @@ async def process_table_number(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
 
     if not text.isdigit():
-        await message.answer("Номер стола должен быть целым положительным числом.")
+        await message.answer(
+            "Номер стола должен быть целым положительным числом.",
+            reply_markup=cancel_keyboard(),
+        )
         return
 
     table_number = int(text)
@@ -98,7 +138,9 @@ async def process_table_number(message: Message, state: FSMContext) -> None:
 async def process_q1(message: Message, state: FSMContext) -> None:
     answer = parse_yes_no(message.text or "")
     if answer is None:
-        await message.answer("Пожалуйста, используй кнопки Да / Нет.")
+        await message.answer(
+            "Пожалуйста, используй кнопки Да / Нет.", reply_markup=yes_no_keyboard()
+        )
         return
 
     await state.update_data(q1=answer)
@@ -110,7 +152,9 @@ async def process_q1(message: Message, state: FSMContext) -> None:
 async def process_q2(message: Message, state: FSMContext) -> None:
     answer = parse_yes_no(message.text or "")
     if answer is None:
-        await message.answer("Пожалуйста, используй кнопки Да / Нет.")
+        await message.answer(
+            "Пожалуйста, используй кнопки Да / Нет.", reply_markup=yes_no_keyboard()
+        )
         return
 
     await state.update_data(q2=answer)
@@ -122,7 +166,9 @@ async def process_q2(message: Message, state: FSMContext) -> None:
 async def process_q3(message: Message, state: FSMContext) -> None:
     answer = parse_yes_no(message.text or "")
     if answer is None:
-        await message.answer("Пожалуйста, используй кнопки Да / Нет.")
+        await message.answer(
+            "Пожалуйста, используй кнопки Да / Нет.", reply_markup=yes_no_keyboard()
+        )
         return
 
     await state.update_data(q3=answer)
@@ -134,7 +180,9 @@ async def process_q3(message: Message, state: FSMContext) -> None:
 async def process_q4(message: Message, state: FSMContext) -> None:
     answer = parse_yes_no(message.text or "")
     if answer is None:
-        await message.answer("Пожалуйста, используй кнопки Да / Нет.")
+        await message.answer(
+            "Пожалуйста, используй кнопки Да / Нет.", reply_markup=yes_no_keyboard()
+        )
         return
 
     await state.update_data(q4=answer)
@@ -191,27 +239,15 @@ async def process_comment(message: Message, state: FSMContext) -> None:
                 comment_text=comment_text,
             )
         except ValueError as exc:
-            await message.answer(f"Не удалось сохранить анкету: {exc}")
+            await message.answer(
+                f"Не удалось сохранить анкету: {exc}",
+                reply_markup=manager_main_keyboard(),
+            )
             await state.clear()
             return
 
     await state.clear()
     await message.answer(
         f"Анкета сохранена. ID анкеты: {survey.id}",
-        reply_markup=manager_main_keyboard(),
-    )
-
-
-@router.message(F.text == "/cancel")
-@router.message(F.text == "Отмена")
-async def cancel_survey(message: Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-    if current_state is None:
-        await message.answer("Сейчас нет активного ввода анкеты.")
-        return
-
-    await state.clear()
-    await message.answer(
-        "Ввод анкеты отменён.",
         reply_markup=manager_main_keyboard(),
     )
