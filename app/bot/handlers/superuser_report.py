@@ -2,18 +2,19 @@ from datetime import datetime, time, date
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import FSInputFile, Message
 
 from app.bot.keyboards.common import superuser_main_keyboard
 from app.bot.keyboards.report import cancel_keyboard
 from app.bot.states.superuser_report import SuperuserReportStates
-from app.core.constants import ROLE_SUPERUSER
+from app.core.constants import ROLE_SUPERUSER, SURVEY_QUESTION_LABELS
 from app.db.repositories.cafe_repository import CafeRepository
 from app.db.repositories.survey_repository import SurveyRepository
 from app.db.repositories.user_repository import UserRepository
 from app.db.session import AsyncSessionLocal
 from app.services.auth_service import AuthService
 from app.services.report_service import ReportService
+from app.services.excel_report_service import ExcelReportService
 
 router = Router()
 
@@ -35,10 +36,10 @@ def format_report_text(report) -> str:
         f"Средний процент: {report.summary.average_percent:.2f}%",
         "",
         "По вопросам:",
-        f"Q1: да={report.q1_stats.yes_count}, нет={report.q1_stats.no_count}, да%={report.q1_stats.yes_percent:.2f}",
-        f"Q2: да={report.q2_stats.yes_count}, нет={report.q2_stats.no_count}, да%={report.q2_stats.yes_percent:.2f}",
-        f"Q3: да={report.q3_stats.yes_count}, нет={report.q3_stats.no_count}, да%={report.q3_stats.yes_percent:.2f}",
-        f"Q4: да={report.q4_stats.yes_count}, нет={report.q4_stats.no_count}, да%={report.q4_stats.yes_percent:.2f}",
+        f"{SURVEY_QUESTION_LABELS['q1']}: да={report.q1_stats.yes_count}, нет={report.q1_stats.no_count}, да%={report.q1_stats.yes_percent:.2f}",
+        f"{SURVEY_QUESTION_LABELS['q2']}: да={report.q2_stats.yes_count}, нет={report.q2_stats.no_count}, да%={report.q2_stats.yes_percent:.2f}",
+        f"{SURVEY_QUESTION_LABELS['q3']}: да={report.q3_stats.yes_count}, нет={report.q3_stats.no_count}, да%={report.q3_stats.yes_percent:.2f}",
+        f"{SURVEY_QUESTION_LABELS['q4']}: да={report.q4_stats.yes_count}, нет={report.q4_stats.no_count}, да%={report.q4_stats.yes_percent:.2f}",
         "",
         "Распределение оценок:",
         f"100%: {report.summary.distribution.score_100_count}",
@@ -162,6 +163,7 @@ async def process_end_date(message: Message, state: FSMContext) -> None:
         survey_repository = SurveyRepository(session)
         auth_service = AuthService(user_repository)
         report_service = ReportService(survey_repository)
+        excel_report_service = ExcelReportService()
 
         user = await auth_service.get_user_by_telegram_id(telegram_user.id)
         if user is None or user.role != ROLE_SUPERUSER:
@@ -174,11 +176,24 @@ async def process_end_date(message: Message, state: FSMContext) -> None:
             start_date=start_datetime,
             end_date=end_datetime,
         )
+        comments = await survey_repository.list_comments_by_cafe_and_period(
+            cafe_id=cafe_id,
+            start_date=start_datetime,
+            end_date=end_datetime,
+        )
+        excel_file_path = excel_report_service.build_cafe_report_file(
+            report=report,
+            comments=comments,
+        )
 
     await state.clear()
     await message.answer(
         format_report_text(report),
         reply_markup=superuser_main_keyboard(),
+    )
+    await message.answer_document(
+        FSInputFile(excel_file_path),
+        caption="Excel-отчёт по кафе готов.",
     )
 
 
