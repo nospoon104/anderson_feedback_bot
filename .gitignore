@@ -10,4 +10,5 @@ alembic/versions/__pycache__/
 dist/
 build/
 *.egg-info/
+reports/
 
