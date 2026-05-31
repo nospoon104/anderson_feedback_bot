@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class QuestionStatsSchema(BaseModel):
@@ -44,6 +44,8 @@ class CafeReportSchema(BaseModel):
     q3_stats: QuestionStatsSchema
     q4_stats: QuestionStatsSchema
     comparison: ReportComparisonSchema | None = None
+    comments: list[str] = Field(default_factory=list)
+    ai_summary: str | None = None
 
 
 class CafeShortReportSchema(BaseModel):

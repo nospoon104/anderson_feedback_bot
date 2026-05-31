@@ -53,6 +53,10 @@ def format_report_text(report) -> str:
         f"Предыдущий период: {report.comparison.previous_average_percent:.2f}%",
         f"Разница: {report.comparison.delta_percent_points:.2f} п.п.",
     ]
+
+    if report.ai_summary:
+        lines.extend(["", report.ai_summary])
+
     return "\n".join(lines)
 
 
@@ -176,15 +180,7 @@ async def process_end_date(message: Message, state: FSMContext) -> None:
             start_date=start_datetime,
             end_date=end_datetime,
         )
-        comments = await survey_repository.list_comments_by_cafe_and_period(
-            cafe_id=cafe_id,
-            start_date=start_datetime,
-            end_date=end_datetime,
-        )
-        excel_file_path = excel_report_service.build_cafe_report_file(
-            report=report,
-            comments=comments,
-        )
+        excel_file_path = excel_report_service.build_cafe_report_file(report=report)
 
     await state.clear()
     await message.answer(

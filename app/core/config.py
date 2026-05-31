@@ -17,6 +17,17 @@ class Settings(BaseSettings):
     sql_echo: bool = Field(default=False, alias="SQL_ECHO")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
+    ai_api_key: str = Field(alias="AI_API_KEY")
+    ai_base_url: str = Field(
+        default="https://ask.chadgpt.ru/api/v1",
+        alias="AI_BASE_URL",
+    )
+    ai_model: str = Field(
+        default="gpt-5.4-mini",
+        alias="AI_MODEL",
+    )
+    ai_timeout: int = Field(default=60, alias="AI_TIMEOUT")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

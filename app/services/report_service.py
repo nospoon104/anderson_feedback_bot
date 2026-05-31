@@ -13,6 +13,7 @@ from app.schemas.report import (
     ReportSummarySchema,
     ScoreDistributionSchema,
 )
+from app.services.ai_comment_service import AICommentService
 
 
 class ReportService:
@@ -20,9 +21,11 @@ class ReportService:
         self,
         survey_repository: SurveyRepository,
         cafe_repository: CafeRepository | None = None,
+        ai_comment_service: AICommentService | None = None,
     ):
         self.survey_repository = survey_repository
         self.cafe_repository = cafe_repository
+        self.ai_comment_service = ai_comment_service or AICommentService()
 
     @staticmethod
     def calculate_survey_score(survey: Survey) -> int:
@@ -107,6 +110,12 @@ class ReportService:
             end_date=end_date,
         )
 
+        comments = await self.survey_repository.list_comments_by_cafe_and_period(
+            cafe_id=cafe_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
         summary = self.calculate_summary(surveys)
 
         q1_stats = self.calculate_question_stats([survey.q1 for survey in surveys])
@@ -131,6 +140,14 @@ class ReportService:
             ),
         )
 
+        try:
+            ai_summary = await self.ai_comment_service.analyze_comments(comments)
+        except Exception:
+            ai_summary = (
+                "AI-анализ комментариев\n\n"
+                "Не удалось выполнить AI-анализ комментариев для этого отчёта."
+            )
+
         return CafeReportSchema(
             cafe_id=cafe_id,
             period=ReportPeriodSchema(
@@ -143,6 +160,8 @@ class ReportService:
             q3_stats=q3_stats,
             q4_stats=q4_stats,
             comparison=comparison,
+            comments=comments,
+            ai_summary=ai_summary,
         )
 
     async def build_network_report(

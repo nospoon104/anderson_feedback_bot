@@ -27,7 +27,7 @@ def parse_date(text: str) -> datetime | None:
 
 
 def format_report_text(report) -> str:
-    return (
+    text = (
         f"Отчёт по кафе #{report.cafe_id}\n"
         f"Период: {report.period.start_date:%d.%m.%Y} - {report.period.end_date:%d.%m.%Y}\n\n"
         f"Всего анкет: {report.summary.total_surveys}\n"
@@ -53,6 +53,11 @@ def format_report_text(report) -> str:
         f"Предыдущий период: {report.comparison.previous_average_percent:.2f}%\n"
         f"Разница: {report.comparison.delta_percent_points:.2f} п.п."
     )
+
+    if report.ai_summary:
+        text += f"\n\n{report.ai_summary}"
+
+    return text
 
 
 @router.message(F.text == "Отчёт за период")
@@ -152,19 +157,11 @@ async def process_report_end_date(message: Message, state: FSMContext) -> None:
             return
 
         report = await report_service.build_cafe_report(
-            cafe_id=user.cafe_id,
+            cafe_id=cafe_id,
             start_date=start_datetime,
             end_date=end_datetime,
         )
-        comments = await survey_repository.list_comments_by_cafe_and_period(
-            cafe_id=user.cafe_id,
-            start_date=start_datetime,
-            end_date=end_datetime,
-        )
-        excel_file_path = excel_report_service.build_cafe_report_file(
-            report=report,
-            comments=comments,
-        )
+        excel_file_path = excel_report_service.build_cafe_report_file(report=report)
 
     await state.clear()
     await message.answer(

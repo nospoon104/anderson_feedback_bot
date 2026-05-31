@@ -81,7 +81,6 @@ class ExcelReportService:
     def build_cafe_report_file(
         self,
         report: CafeReportSchema,
-        comments: list[str],
     ) -> Path:
         workbook = Workbook()
 
@@ -131,8 +130,8 @@ class ExcelReportService:
         comments_ws.append(["Комментарий"])
         self._style_header(comments_ws[1])
 
-        if comments:
-            for comment in comments:
+        if report.comments:
+            for comment in report.comments:
                 comments_ws.append([comment])
         else:
             comments_ws.append(["Комментариев за выбранный период нет"])
