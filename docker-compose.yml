@@ -6,13 +6,23 @@ services:
     container_name: restaurant_feedback_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: restaurant_feedback
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  bot:
+    build: .
+    container_name: restaurant_feedback_bot
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - .env
+    command: python -m app.main
 
 volumes:
   postgres_data:

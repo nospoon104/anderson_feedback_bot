@@ -13,10 +13,10 @@ def create_bot() -> Bot:
 
 
 def create_dispatcher() -> Dispatcher:
-    dp = Dispatcher()
-    dp.include_router(start_router)
-    dp.include_router(survey_router)
-    dp.include_router(report_router)
-    dp.include_router(superuser_report_router)
-    dp.include_router(network_report_router)
-    return dp
+    dispatcher = Dispatcher()
+    dispatcher.include_router(start_router)
+    dispatcher.include_router(survey_router)
+    dispatcher.include_router(report_router)
+    dispatcher.include_router(superuser_report_router)
+    dispatcher.include_router(network_report_router)
+    return dispatcher
