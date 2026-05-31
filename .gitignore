@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .env
+!.env.example
 .idea/
 .vscode/
 alembic/__pycache__/
