@@ -157,7 +157,7 @@ async def process_report_end_date(message: Message, state: FSMContext) -> None:
             return
 
         report = await report_service.build_cafe_report(
-            cafe_id=cafe_id,
+            cafe_id=user.cafe_id,
             start_date=start_datetime,
             end_date=end_datetime,
         )

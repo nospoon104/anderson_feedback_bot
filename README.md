@@ -1,257 +1,245 @@
-### Anderson feedback analizer 
+# Anderson Feedback Bot
 
-# Restaurant Feedback Bot / Бот для оцифровки анкет гостей
+Telegram-бот для сети ресторанов, который оцифровывает бумажные анкеты гостей, сохраняет данные в PostgreSQL и формирует отчёты по отдельному кафе и по всей сети.
 
-## EN
+Проект сделан как рабочий коммерческий MVP: бот уже реализован, задеплоен на VPS и используется как внутренний инструмент для сбора и анализа обратной связи.
 
-### Overview
-Restaurant Feedback Bot is a Telegram bot for digitizing paper-based guest feedback forms in a restaurant chain.
+## О проекте
 
-The system allows managers to enter survey results into PostgreSQL and generate analytical reports for a selected period. Superusers can view reports for a specific cafe or for the entire network. The bot also exports reports to Excel. 
+Во многих заведениях обратная связь от гостей продолжает собираться на бумаге. Это создаёт несколько типовых проблем:
 
-This project was built as an MVP focused on:
-- fast manual digitization of paper forms,
-- simple analytics for operational management,
-- a clear service-oriented architecture,
-- practical production-oriented backend development.
+- данные неудобно агрегировать;
+- сложно быстро получить аналитику по кафе или по сети;
+- комментарии гостей остаются в бумажном архиве;
+- сравнение периодов приходится делать вручную или не делать вообще.
 
-### Key features
-- Telegram bot based on `aiogram 3`
-- PostgreSQL database
-- Async SQLAlchemy 2.0
-- Alembic migrations
-- Role-based access:
-  - `manager`
-  - `superuser`
-- FSM flow for entering surveys
-- Cafe report for managers
-- Cafe report for superusers
-- Network-wide report for superusers
-- Excel export for reports
-- Test data seed scripts
+Этот бот решает задачу без отдельного web-интерфейса: менеджеры переносят анкеты в Telegram, данные сохраняются в PostgreSQL, а руководители получают структурированные отчёты и Excel-выгрузки.
 
-### Business logic
-Each guest survey contains:
-- visit date and time
-- table number
-- 4 yes/no questions
-- optional comment
+## Основные возможности
 
-Scoring logic:
-- `Yes = 1`
-- `No = 0`
-- total survey score = sum of 4 answers
-- converted to percentage:
+- ввод анкет через Telegram-бота;
+- роли `manager` и `superuser`;
+- хранение данных в PostgreSQL;
+- отчёт менеджера по своему кафе за выбранный период;
+- отчёт суперпользователя по любому кафе;
+- отчёт по всей сети;
+- сравнение периода с предыдущим периодом той же длины;
+- Excel-экспорт отчётов;
+- AI-анализ комментариев гостей.
+
+## Роли пользователей
+
+### Manager
+
+Может:
+
+- вносить анкеты гостей;
+- получать отчёт по своему кафе за период;
+- получать Excel-файл с отчётом.
+
+### Superuser
+
+Может:
+
+- получать отчёт по любому кафе;
+- получать отчёт по всей сети;
+- скачивать Excel-отчёты;
+- использовать административные сценарии управления пользователями и данными.
+
+## Бизнес-логика анкеты
+
+Каждая анкета содержит:
+
+- дату и время визита;
+- номер стола;
+- 4 вопроса с ответами `Да / Нет`;
+- необязательный комментарий.
+
+Логика подсчёта:
+
+- `Да = 1`
+- `Нет = 0`
+- итоговый `score` = сумма 4 ответов
+- перевод в проценты:
   - `4/4 = 100%`
   - `3/4 = 75%`
   - `2/4 = 50%`
   - `1/4 = 25%`
   - `0/4 = 0%`
 
-Reports include:
-- total surveys
-- average score
-- average percentage
-- score distribution
-- yes/no stats for each question
-- comparison with the previous period of the same length
+Отчёты рассчитывают:
 
-### User roles
-#### Manager
-Can:
-- start the bot
-- enter surveys
-- generate a report for their own cafe for a selected period
-- receive an Excel file for the report
+- общее количество анкет;
+- средний балл;
+- средний процент;
+- статистику `Да / Нет` по каждому вопросу;
+- распределение по итоговым оценкам;
+- сравнение с предыдущим периодом той же длины.
 
-#### Superuser
-Can:
-- start the bot
-- generate a report for any selected cafe
-- generate a report for the entire network
-- receive Excel files for reports
+Для отчёта по кафе дополнительно доступны:
 
-### Tech stack
+- список комментариев;
+- AI summary по комментариям гостей.
+
+## Текущий статус
+
+Сейчас проект находится на стадии рабочего MVP.
+
+Уже реализовано:
+
+- Telegram-бот на `aiogram 3`;
+- FSM-сценарий ввода анкет;
+- PostgreSQL + SQLAlchemy 2 async;
+- Alembic миграции;
+- роли `manager / superuser`;
+- отчёты по кафе;
+- отчёты по сети;
+- Excel-экспорт;
+- AI-анализ комментариев;
+- Docker-сборка и deploy на VPS.
+
+## Стек
+
 - Python 3.12
 - aiogram 3
 - PostgreSQL
-- SQLAlchemy 2.0 async
+- SQLAlchemy 2 async
 - asyncpg
 - Alembic
 - Pydantic 2
 - openpyxl
-- Docker Compose
+- httpx
+- Docker / Docker Compose
 
-### Architecture
-The project follows a layered architecture:
+## Архитектура
 
-- `handlers` — Telegram bot interaction layer
-- `services` — business logic
-- `repositories` — database access layer
-- `db/models` — SQLAlchemy ORM models
+Проект построен по слоистой схеме:
 
-Flow:
-`Telegram update -> handler -> service -> repository -> PostgreSQL`
+`handlers -> services -> repositories -> db`
 
-### Project structure
+Где:
+
+- `handlers` — Telegram-обработчики и FSM-сценарии;
+- `services` — бизнес-логика приложения;
+- `repositories` — доступ к данным;
+- `db/models` — ORM-модели SQLAlchemy.
+
+Это позволяет держать бизнес-логику отдельно от Telegram-слоя и не смешивать работу с базой с обработкой пользовательских сообщений.
+
+Подробнее:
+
+- [docs/architecture.md](docs/architecture.md)
+- [docs/db_schema.md](docs/db_schema.md)
+- [docs/decisions.md](docs/decisions.md)
+- [docs/product_requirements.md](docs/product_requirements.md)
+
+## Структура проекта
 ```text
-├── alembic
-├── alembic.ini
-├── app
-│   ├── bot
-│   │   ├── bot.py
-│   │   ├── handlers
-│   │   │   ├── network_report.py
-│   │   │   ├── report.py
-│   │   │   ├── start.py
-│   │   │   ├── superuser_report.py
-│   │   │   └── survey.py
-│   │   ├── keyboards
-│   │   │   ├── common.py
-│   │   │   ├── report.py
-│   │   │   └── survey.py
-│   │   └── states
-│   │       ├── network_report.py
-│   │       ├── report.py
-│   │       ├── superuser_report.py
-│   │       └── survey.py
-│   ├── check_cafes.py
-│   ├── check_data.py
-│   ├── check_report.py
-│   ├── check_surveys.py
-│   ├── check_users.py
-│   ├── cleanup_test_cafe.py
-│   ├── core
-│   │   ├── config.py
-│   │   └── constants.py
-│   ├── db
-│   │   ├── base.py
-│   │   ├── models
-│   │   │   ├── cafe.py
-│   │   │   ├── survey.py
-│   │   │   └── user.py
-│   │   ├── repositories
-│   │   │   ├── cafe_repository.py
-│   │   │   ├── survey_repository.py
-│   │   │   └── user_repository.py
-│   │   └── session.py
-│   ├── main.py
-│   ├── manage_user.py
-│   ├── reset_surveys.py
-│   ├── schemas
-│   │   ├── cafe.py
-│   │   ├── report.py
-│   │   ├── survey.py
-│   │   └── user.py
-│   ├── seed_cafes.py
-│   ├── seed_data.py
-│   ├── seed_test_managers.py
-│   ├── seed_test_surveys.py
-│   ├── services
-│   │   ├── auth_service.py
-│   │   ├── excel_report_service.py
-│   │   ├── report_service.py
-│   │   └── survey_service.py
-│   ├── test_db_connection.py
-│   └── utils
+.
+├── alembic/
+├── app/
+│   ├── bot/
+│   │   ├── handlers/
+│   │   ├── keyboards/
+│   │   └── states/
+│   ├── core/
+│   ├── db/
+│   │   ├── models/
+│   │   └── repositories/
+│   ├── schemas/
+│   ├── services/
+│   └── main.py
+├── docs/
+├── Dockerfile
 ├── docker-compose.yml
-├── docs
-│   ├── architecture.md
-│   ├── bot_flows.md
-│   ├── db_schema.md
-│   ├── decisions.md
-│   └── product_requirements.md
+├── alembic.ini
 ├── pyproject.toml
-├── README.md
-
-```
-### Environment variables:
-
-
-``` 
-Example .env:
-
-    BOT_TOKEN=your_bot_token_here
-    DB_HOST=localhost
-    DB_PORT=5432
-    DB_NAME=restaurant_feedback
-    DB_USER=postgres
-    DB_PASSWORD=postgres
-    DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/restaurant_feedback 
+└── README.md
 ```
 
-# Local development setup
-## 1. Start PostgreSQL
+## Переменные окружения
+Проект использует .env файл. Пример есть в .env.example.
 
-` docker compose up -d`
+Основные переменные:
 
-## 2. Create and activate virtual environment
-` python -m venv .venv
-`
+```
+BOT_TOKEN=your_bot_token_here
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=restaurant_feedback
+DB_USER=postgres
+DB_PASSWORD=postgres
 
-`source .venv/bin/activate`
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/restaurant_feedback
 
-## 3. Install project
+DEBUG=true
+SQL_ECHO=false
+LOG_LEVEL=INFO
 
-` pip install -e .`
+AI_API_KEY=your_api_token_here
+AI_BASE_URL=https://ask.chadgpt.ru/api/v1
+AI_MODEL=gpt-5.4-mini
+AI_TIMEOUT=60
+```
 
-## 4. Apply migrations
+## Локальный запуск
+
+### 1. Клонировать репозиторий
+
+`git clone https://github.com/nospoon104/anderson_feedback_bot.git`
+`cd anderson_feedback_bot`
+
+### 2. Создать .env на основе примера
+
+`cp .env.example .env`
+
+### 3. Поднять PostgreSQL через Docker Compose
+
+`docker compose up -d db`
+
+### 4. Создать виртуальное окружение и установить проект
+Для Linux:
+
+`python -m venv .venv`   
+`source .venv/bin/activate`   
+`pip install -e .`
+
+### 5. Применить миграции
 
 `alembic upgrade head`
 
-## 5. Run the bot
+### 6. Запустить бота локально
 
 `python -m app.main`
 
-___
-___
+## Запуск через Docker Compose
+Если нужен запуск приложения и БД в контейнерах:
 
-# Database migrations
-Alembic is configured to read the database URL from application settings.
+`docker compose up --build`
 
-## Generate migration:
+Контейнер bot запускает приложение командой:
 
-`alembic revision --autogenerate -m "message"`
+`python -m app.main`
 
-## Apply migrations:
-
+### Миграции
+Применить миграции
 
 `alembic upgrade head`
 
-# Service scripts
-The project includes helper scripts for local development and testing:
-- seeding cafes
-- seeding managers
-- seeding surveys
-- checking inserted data
-- cleaning test data
+Создать новую миграцию
 
-These scripts are intended mainly for development and debugging.
+`alembic revision --autogenerate -m "add some feature"`
 
-# Current MVP status
-## Implemented:
-- survey input flow
-- database persistence
-- role-based access
-- cafe reports
-- network reports
-- Excel exports
-- previous-period comparison
+---
 
-## Planned:
-- AI analysis of comments
-- deployment packaging
-- operational hardening
-- UX improvements
-- user management via Telegram bot
-- Portfolio value
+# Что показывает этот проект
+## Как портфолио-проект он демонстрирует:
 
-## This project demonstrates:
-- async Python backend development
-- Telegram bot development with FSM
-- relational database design
-- SQLAlchemy and Alembic usage
-- layered architecture
-- reporting logic
-- Excel generation
-- production-oriented thinking
+- умение решать реальную бизнес-задачу, а не только учебный CRUD;
+- работу с async Python-стеком;
+- проектирование БД и миграций;
+- построение слоистой архитектуры;
+- реализацию Telegram FSM-сценариев;
+- расчёт отчётов и аналитики;
+- генерацию Excel-файлов;
+- deploy и поддержку рабочего MVP.

@@ -12,3 +12,4 @@ build/
 *.egg-info/
 reports/
 docker-compose.local.yml
+reports/*.xlsx
