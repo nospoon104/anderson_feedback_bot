@@ -1,7 +1,12 @@
 from datetime import datetime
 
-from app.core.constants import MAX_COMMENT_LENGTH, MAX_TABLE_NUMBER, MIN_TABLE_NUMBER
-from app.db.models import Survey, User
+from app.core.constants import (
+    GUEST_TABLE_NUMBER,
+    MAX_COMMENT_LENGTH,
+    MAX_TABLE_NUMBER,
+    MIN_TABLE_NUMBER,
+)
+from app.db.models import Cafe, Survey, User
 from app.db.repositories.survey_repository import SurveyRepository
 from app.schemas.survey import SurveyCreateSchema
 
@@ -38,6 +43,33 @@ class SurveyService:
             created_by_user_id=manager.id,
             visit_datetime=visit_datetime,
             table_number=table_number,
+            q1=q1,
+            q2=q2,
+            q3=q3,
+            q4=q4,
+            comment_text=comment_text,
+        )
+
+    async def create_guest_survey(
+        self,
+        cafe: Cafe,
+        q1: bool,
+        q2: bool,
+        q3: bool,
+        q4: bool,
+        comment_text: str | None = None,
+    ) -> Survey:
+        if not cafe.is_active:
+            raise ValueError("Cafe is inactive")
+
+        if comment_text and len(comment_text) > MAX_COMMENT_LENGTH:
+            raise ValueError("Comment is too long")
+
+        survey_data = SurveyCreateSchema(
+            cafe_id=cafe.id,
+            created_by_user_id=None,
+            visit_datetime=datetime.utcnow(),
+            table_number=GUEST_TABLE_NUMBER,
             q1=q1,
             q2=q2,
             q3=q3,

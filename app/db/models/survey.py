@@ -11,8 +11,8 @@ class Survey(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     cafe_id: Mapped[int] = mapped_column(ForeignKey("cafes.id"), nullable=False)
-    created_by_user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id"), nullable=False
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
     )
 
     visit_datetime: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -33,4 +33,4 @@ class Survey(Base):
     )
 
     cafe: Mapped["Cafe"] = relationship(back_populates="surveys")
-    created_by_user: Mapped["User"] = relationship(back_populates="surveys")
+    created_by_user: Mapped["User | None"] = relationship(back_populates="surveys")

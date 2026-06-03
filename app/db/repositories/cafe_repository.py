@@ -31,3 +31,9 @@ class CafeRepository:
     async def list_all(self) -> list[Cafe]:
         result = await self.session.execute(select(Cafe).order_by(Cafe.id))
         return list(result.scalars().all())
+
+    async def get_by_guest_token(self, guest_token: str) -> Cafe | None:
+        result = await self.session.execute(
+            select(Cafe).where(Cafe.guest_token == guest_token)
+        )
+        return result.scalar_one_or_none()

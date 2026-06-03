@@ -6,6 +6,7 @@ def manager_main_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="Добавить анкету")],
             [KeyboardButton(text="Отчёт за период")],
+            [KeyboardButton(text="QR-код для гостей")],
         ],
         resize_keyboard=True,
     )

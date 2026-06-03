@@ -98,7 +98,10 @@ async def start_superuser_report(message: Message, state: FSMContext) -> None:
         await state.set_state(SuperuserReportStates.waiting_for_cafe_id)
 
 
-@router.message(SuperuserReportStates.waiting_for_cafe_id)
+@router.message(
+    SuperuserReportStates.waiting_for_cafe_id,
+    F.text.in_({"Отмена", "/cancel"}),
+)
 async def process_cafe_id(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
     if not text.isdigit():
@@ -123,7 +126,10 @@ async def process_cafe_id(message: Message, state: FSMContext) -> None:
     await state.set_state(SuperuserReportStates.waiting_for_start_date)
 
 
-@router.message(SuperuserReportStates.waiting_for_start_date)
+@router.message(
+    SuperuserReportStates.waiting_for_start_date,
+    F.text.in_({"Отмена", "/cancel"}),
+)
 async def process_start_date(message: Message, state: FSMContext) -> None:
     parsed_date = parse_date(message.text or "")
     if parsed_date is None:
@@ -138,7 +144,10 @@ async def process_start_date(message: Message, state: FSMContext) -> None:
     await state.set_state(SuperuserReportStates.waiting_for_end_date)
 
 
-@router.message(SuperuserReportStates.waiting_for_end_date)
+@router.message(
+    SuperuserReportStates.waiting_for_end_date,
+    F.text.in_({"Отмена", "/cancel"}),
+)
 async def process_end_date(message: Message, state: FSMContext) -> None:
     parsed_end_date = parse_date(message.text or "")
     if parsed_end_date is None:
@@ -193,13 +202,7 @@ async def process_end_date(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(F.text == "Отмена")
-@router.message(F.text == "/cancel")
 async def cancel_superuser_report(message: Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-    if current_state is None:
-        return
-
     await state.clear()
     await message.answer(
         "Формирование отчёта отменено.",

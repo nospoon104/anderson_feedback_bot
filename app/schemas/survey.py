@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 class SurveyCreateSchema(BaseModel):
     cafe_id: int
-    created_by_user_id: int
+    created_by_user_id: int | None = None
     visit_datetime: datetime
     table_number: int
     q1: bool
@@ -20,7 +20,7 @@ class SurveyReadSchema(BaseModel):
 
     id: int
     cafe_id: int
-    created_by_user_id: int
+    created_by_user_id: int | None
     visit_datetime: datetime
     table_number: int
     q1: bool
