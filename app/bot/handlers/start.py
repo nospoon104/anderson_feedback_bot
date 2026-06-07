@@ -1,5 +1,6 @@
 from aiogram import Router
 from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.bot.handlers.guest_survey import start_guest_survey
@@ -17,7 +18,7 @@ router = Router()
 
 
 @router.message(CommandStart())
-async def start_handler(message: Message) -> None:
+async def start_handler(message: Message, state: FSMContext) -> None:
     telegram_user = message.from_user
     if telegram_user is None:
         await message.answer("Не удалось определить пользователя Telegram.")
@@ -53,11 +54,13 @@ async def start_handler(message: Message) -> None:
 
     if user is None:
         await message.answer(
-            "Привет.\n\n"
-            "Если вы хотели оставить отзыв по QR-коду, попробуйте открыть ссылку ещё раз.\n"
+            "Привет!\n\n"
+            "Если вы хотели оставить отзыв по QR-коду, откройте ссылку из QR ещё раз.\n"
             "Если вы сотрудник, обратитесь к администратору для доступа."
         )
         return
+
+    await state.clear()
 
     if user.role == ROLE_MANAGER:
         await message.answer(

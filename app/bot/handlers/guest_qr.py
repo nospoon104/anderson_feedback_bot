@@ -1,13 +1,12 @@
 from aiogram import F, Router
 from aiogram.types import BufferedInputFile, Message
 
-from app.core.config import settings
-from app.core.constants import ROLE_MANAGER
+from app.core.constants import ROLE_MANAGER, ROLE_SUPERUSER, GUEST_SURVEY_START_PREFIX
+from app.db.repositories.cafe_repository import CafeRepository
 from app.db.repositories.user_repository import UserRepository
 from app.db.session import AsyncSessionLocal
 from app.services.auth_service import AuthService
 from app.services.qr_service import QRService
-from app.core.constants import GUEST_SURVEY_START_PREFIX
 
 router = Router()
 
@@ -27,32 +26,43 @@ async def send_guest_qr(message: Message) -> None:
 
     async with AsyncSessionLocal() as session:
         user_repository = UserRepository(session)
+        cafe_repository = CafeRepository(session)
         auth_service = AuthService(user_repository)
+
         user = await auth_service.get_user_by_telegram_id(telegram_user.id)
 
         if user is None:
             await message.answer("У тебя нет доступа к системе.")
             return
 
-        if user.role != ROLE_MANAGER or user.cafe is None:
+        if user.role != ROLE_MANAGER:
             await message.answer("QR-код доступен только менеджеру привязанного кафе.")
+            return
+
+        if user.cafe_id is None:
+            await message.answer("Менеджер не привязан к кафе.")
+            return
+
+        cafe = await cafe_repository.get_by_id(user.cafe_id)
+        if cafe is None:
+            await message.answer("Кафе не найдено.")
             return
 
         link = (
             f"https://t.me/{bot_username}"
-            f"?start={GUEST_SURVEY_START_PREFIX}{user.cafe.guest_token}"
+            f"?start={GUEST_SURVEY_START_PREFIX}{cafe.guest_token}"
         )
 
         qr_bytes = QRService.build_qr_image_bytes(link)
         qr_file = BufferedInputFile(
             qr_bytes.getvalue(),
-            filename=f"guest_qr_cafe_{user.cafe_id}.png",
+            filename=f"guest_qr_cafe_{cafe.id}.png",
         )
 
         await message.answer_document(
             qr_file,
             caption=(
-                f"QR-код для гостей кафе «{user.cafe.name}».\n\n"
+                f"QR-код для гостей кафе «{cafe.name}».\n\n"
                 f"Гость может отсканировать код и сразу заполнить анкету в Telegram.\n"
                 f"Файл можно распечатать и разместить в кафе."
             ),
