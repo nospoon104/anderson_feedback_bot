@@ -4,8 +4,12 @@ ROLE_SUPERUSER = "superuser"
 ROLES = {ROLE_MANAGER, ROLE_SUPERUSER}
 
 MAX_COMMENT_LENGTH = 1000
+
+UNKNOWN_TABLE_NUMBER = 0
 MIN_TABLE_NUMBER = 1
-MAX_TABLE_NUMBER = 200
+MAX_TABLE_NUMBER = 1000
+
+GUEST_TABLE_NUMBER = 0
 
 SURVEY_QUESTIONS = {
     "q1": "Меня встретили радушно, проявили заботу и проводили до стола.",
