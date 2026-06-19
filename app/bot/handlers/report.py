@@ -90,7 +90,7 @@ async def start_report(message: Message, state: FSMContext) -> None:
 
 @router.message(ReportStates.waiting_for_start_date)
 async def process_report_start_date(message: Message, state: FSMContext) -> None:
-    if (message.text or "").strip().lower() == "отмена":
+    if (message.text or "").strip().lower() in {"отмена", "главное меню", "/cancel"}:
         await state.clear()
         await message.answer(
             "Формирование отчёта отменено.",
@@ -113,7 +113,7 @@ async def process_report_start_date(message: Message, state: FSMContext) -> None
 
 @router.message(ReportStates.waiting_for_end_date)
 async def process_report_end_date(message: Message, state: FSMContext) -> None:
-    if (message.text or "").strip().lower() == "отмена":
+    if (message.text or "").strip().lower() in {"отмена", "главное меню", "/cancel"}:
         await state.clear()
         await message.answer(
             "Формирование отчёта отменено.",

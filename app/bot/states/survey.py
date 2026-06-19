@@ -2,7 +2,9 @@ from aiogram.fsm.state import State, StatesGroup
 
 
 class SurveyStates(StatesGroup):
-    waiting_for_visit_datetime = State()
+    waiting_for_visit_date_choice = State()
+    waiting_for_visit_date_manual = State()
+    waiting_for_visit_time = State()
     waiting_for_table_number = State()
     waiting_for_q1 = State()
     waiting_for_q2 = State()

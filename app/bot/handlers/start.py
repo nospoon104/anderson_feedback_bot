@@ -4,10 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.bot.handlers.guest_survey import start_guest_survey
-from app.bot.keyboards.common import (
-    manager_main_keyboard,
-    superuser_main_keyboard,
-)
+from app.bot.keyboards.common import manager_main_keyboard, superuser_main_keyboard
 from app.core.constants import GUEST_SURVEY_START_PREFIX, ROLE_MANAGER, ROLE_SUPERUSER
 from app.db.repositories.cafe_repository import CafeRepository
 from app.db.repositories.user_repository import UserRepository
@@ -49,31 +46,40 @@ async def start_handler(message: Message, state: FSMContext) -> None:
             return
 
         user_repository = UserRepository(session)
+        cafe_repository = CafeRepository(session)
         auth_service = AuthService(user_repository)
         user = await auth_service.get_user_by_telegram_id(telegram_user.id)
 
-    if user is None:
-        await message.answer(
-            "Привет!\n\n"
-            "Если вы хотели оставить отзыв по QR-коду, откройте ссылку из QR ещё раз.\n"
-            "Если вы сотрудник, обратитесь к администратору для доступа."
-        )
-        return
+        if user is None:
+            await message.answer(
+                "Привет!\n\n"
+                "Если вы хотели оставить отзыв по QR-коду, откройте ссылку из QR ещё раз.\n"
+                "Если вы сотрудник, обратитесь к администратору для доступа."
+            )
+            return
 
-    await state.clear()
+        await state.clear()
 
-    if user.role == ROLE_MANAGER:
-        await message.answer(
-            f"Привет, {user.full_name}.\nТы авторизован как менеджер.",
-            reply_markup=manager_main_keyboard(),
-        )
-        return
+        if user.role == ROLE_MANAGER:
+            cafe_name = "не указано"
+            if user.cafe_id is not None:
+                cafe = await cafe_repository.get_by_id(user.cafe_id)
+                if cafe is not None:
+                    cafe_name = cafe.name
 
-    if user.role == ROLE_SUPERUSER:
-        await message.answer(
-            f"Привет, {user.full_name}.\nТы авторизован как суперюзер.",
-            reply_markup=superuser_main_keyboard(),
-        )
-        return
+            await message.answer(
+                f"Привет, {user.full_name}.\n"
+                f"Ты авторизован(а) как менеджер.\n"
+                f"Кафе: {cafe_name}",
+                reply_markup=manager_main_keyboard(),
+            )
+            return
+
+        if user.role == ROLE_SUPERUSER:
+            await message.answer(
+                f"Привет, {user.full_name}.\n" f"Ты авторизован(а) как суперюзер.",
+                reply_markup=superuser_main_keyboard(),
+            )
+            return
 
     await message.answer("Роль пользователя не распознана.")

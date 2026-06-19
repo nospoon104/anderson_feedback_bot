@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -6,12 +6,14 @@ from aiogram.types import Message
 
 from app.bot.keyboards.common import manager_main_keyboard
 from app.bot.keyboards.survey import (
-    cancel_keyboard,
     skip_comment_keyboard,
+    survey_date_keyboard,
+    table_keyboard,
+    time_keyboard,
     yes_no_keyboard,
 )
 from app.bot.states.survey import SurveyStates
-from app.core.constants import ROLE_MANAGER, SURVEY_QUESTIONS
+from app.core.constants import ROLE_MANAGER, SURVEY_QUESTIONS, UNKNOWN_TABLE_NUMBER
 from app.db.repositories.survey_repository import SurveyRepository
 from app.db.repositories.user_repository import UserRepository
 from app.db.session import AsyncSessionLocal
@@ -30,8 +32,73 @@ def parse_yes_no(text: str) -> bool | None:
     return None
 
 
+def parse_manual_date(text: str) -> datetime | None:
+    try:
+        return datetime.strptime(text.strip(), "%d.%m.%Y")
+    except ValueError:
+        return None
+
+
+def parse_time_text(text: str) -> tuple[int, int] | None:
+    try:
+        parsed = datetime.strptime(text.strip(), "%H:%M")
+        return parsed.hour, parsed.minute
+    except ValueError:
+        return None
+
+
+def resolve_quick_date(text: str) -> datetime | None:
+    normalized = text.strip().lower()
+    today = datetime.now()
+
+    if normalized == "сегодня":
+        return today
+    if normalized == "вчера":
+        return today - timedelta(days=1)
+    if normalized == "позавчера":
+        return today - timedelta(days=2)
+
+    return None
+
+
+@router.message(F.text == "Главное меню")
+async def go_to_main_menu(message: Message, state: FSMContext) -> None:
+    telegram_user = message.from_user
+    await state.clear()
+
+    if telegram_user is None:
+        await message.answer("Не удалось определить пользователя Telegram.")
+        return
+
+    async with AsyncSessionLocal() as session:
+        user_repository = UserRepository(session)
+        auth_service = AuthService(user_repository)
+        user = await auth_service.get_user_by_telegram_id(telegram_user.id)
+
+    if user is None:
+        await message.answer("У тебя нет доступа к системе.")
+        return
+
+    if user.role == ROLE_MANAGER:
+        await message.answer(
+            "Возвращаю в главное меню.",
+            reply_markup=manager_main_keyboard(),
+        )
+        return
+
+    await message.answer("Главное меню недоступно для этой роли.")
+
+
 @router.message(
-    SurveyStates.waiting_for_visit_datetime,
+    SurveyStates.waiting_for_visit_date_choice,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+@router.message(
+    SurveyStates.waiting_for_visit_date_manual,
+    F.text.in_({"Отмена", "/cancel"}),
+)
+@router.message(
+    SurveyStates.waiting_for_visit_time,
     F.text.in_({"Отмена", "/cancel"}),
 )
 @router.message(
@@ -88,28 +155,95 @@ async def start_survey(message: Message, state: FSMContext) -> None:
 
     await state.clear()
     await message.answer(
-        "Введите дату и время визита в формате ДД.ММ.ГГГГ ЧЧ:ММ\n"
-        "Например: 28.05.2026 19:30",
-        reply_markup=cancel_keyboard(),
+        "Выберите дату визита:",
+        reply_markup=survey_date_keyboard(),
     )
-    await state.set_state(SurveyStates.waiting_for_visit_datetime)
+    await state.set_state(SurveyStates.waiting_for_visit_date_choice)
 
 
-@router.message(SurveyStates.waiting_for_visit_datetime)
-async def process_visit_datetime(message: Message, state: FSMContext) -> None:
+@router.message(SurveyStates.waiting_for_visit_date_choice)
+async def process_visit_date_choice(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
 
-    try:
-        visit_datetime = datetime.strptime(text, "%d.%m.%Y %H:%M")
-    except ValueError:
+    quick_date = resolve_quick_date(text)
+    if quick_date is not None:
+        await state.update_data(visit_date=quick_date.date().isoformat())
         await message.answer(
-            "Неверный формат даты.\n" "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ",
-            reply_markup=cancel_keyboard(),
+            "Введите время визита в формате ЧЧ:ММ\nНапример: 19:30",
+            reply_markup=time_keyboard(),
+        )
+        await state.set_state(SurveyStates.waiting_for_visit_time)
+        return
+
+    if text == "Ввести вручную":
+        await message.answer(
+            "Введите дату визита в формате ДД.ММ.ГГГГ\nНапример: 28.05.2026",
+            reply_markup=time_keyboard(),
+        )
+        await state.set_state(SurveyStates.waiting_for_visit_date_manual)
+        return
+
+    await message.answer(
+        "Выберите дату кнопкой: Сегодня, Вчера, Позавчера или Ввести вручную.",
+        reply_markup=survey_date_keyboard(),
+    )
+
+
+@router.message(SurveyStates.waiting_for_visit_date_manual)
+async def process_visit_date_manual(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip()
+
+    quick_date = resolve_quick_date(text)
+    if quick_date is not None:
+        await state.update_data(visit_date=quick_date.date().isoformat())
+        await message.answer(
+            "Введите время визита в формате ЧЧ:ММ\nНапример: 19:30",
+            reply_markup=time_keyboard(),
+        )
+        await state.set_state(SurveyStates.waiting_for_visit_time)
+        return
+
+    visit_date = parse_manual_date(text)
+    if visit_date is None:
+        await message.answer(
+            "Неверный формат даты. Введите ДД.ММ.ГГГГ",
+            reply_markup=time_keyboard(),
         )
         return
 
+    await state.update_data(visit_date=visit_date.date().isoformat())
+    await message.answer(
+        "Введите время визита в формате ЧЧ:ММ\nНапример: 19:30",
+        reply_markup=time_keyboard(),
+    )
+    await state.set_state(SurveyStates.waiting_for_visit_time)
+
+
+@router.message(SurveyStates.waiting_for_visit_time)
+async def process_visit_time(message: Message, state: FSMContext) -> None:
+    text = (message.text or "").strip()
+
+    parsed_time = parse_time_text(text)
+    if parsed_time is None:
+        await message.answer(
+            "Неверный формат времени. Введите ЧЧ:ММ\nНапример: 19:30",
+            reply_markup=time_keyboard(),
+        )
+        return
+
+    hour, minute = parsed_time
+    data = await state.get_data()
+    visit_date = datetime.fromisoformat(data["visit_date"]).date()
+    visit_datetime = datetime.combine(visit_date, datetime.min.time()).replace(
+        hour=hour,
+        minute=minute,
+    )
+
     await state.update_data(visit_datetime=visit_datetime.isoformat())
-    await message.answer("Введите номер стола:", reply_markup=cancel_keyboard())
+    await message.answer(
+        "Введите номер стола или нажмите «Без номера стола».",
+        reply_markup=table_keyboard(),
+    )
     await state.set_state(SurveyStates.waiting_for_table_number)
 
 
@@ -117,14 +251,17 @@ async def process_visit_datetime(message: Message, state: FSMContext) -> None:
 async def process_table_number(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
 
-    if not text.isdigit():
-        await message.answer(
-            "Номер стола должен быть целым положительным числом.",
-            reply_markup=cancel_keyboard(),
-        )
-        return
+    if text == "Без номера стола":
+        table_number = UNKNOWN_TABLE_NUMBER
+    else:
+        if not text.isdigit():
+            await message.answer(
+                "Введите номер стола числом или нажмите «Без номера стола».",
+                reply_markup=table_keyboard(),
+            )
+            return
+        table_number = int(text)
 
-    table_number = int(text)
     await state.update_data(table_number=table_number)
 
     await message.answer(
@@ -139,12 +276,16 @@ async def process_q1(message: Message, state: FSMContext) -> None:
     answer = parse_yes_no(message.text or "")
     if answer is None:
         await message.answer(
-            "Пожалуйста, используй кнопки Да / Нет.", reply_markup=yes_no_keyboard()
+            "Пожалуйста, используй кнопки Да / Нет.",
+            reply_markup=yes_no_keyboard(),
         )
         return
 
     await state.update_data(q1=answer)
-    await message.answer(SURVEY_QUESTIONS["q2"], reply_markup=yes_no_keyboard())
+    await message.answer(
+        SURVEY_QUESTIONS["q2"],
+        reply_markup=yes_no_keyboard(),
+    )
     await state.set_state(SurveyStates.waiting_for_q2)
 
 
@@ -153,12 +294,16 @@ async def process_q2(message: Message, state: FSMContext) -> None:
     answer = parse_yes_no(message.text or "")
     if answer is None:
         await message.answer(
-            "Пожалуйста, используй кнопки Да / Нет.", reply_markup=yes_no_keyboard()
+            "Пожалуйста, используй кнопки Да / Нет.",
+            reply_markup=yes_no_keyboard(),
         )
         return
 
     await state.update_data(q2=answer)
-    await message.answer(SURVEY_QUESTIONS["q3"], reply_markup=yes_no_keyboard())
+    await message.answer(
+        SURVEY_QUESTIONS["q3"],
+        reply_markup=yes_no_keyboard(),
+    )
     await state.set_state(SurveyStates.waiting_for_q3)
 
 
@@ -167,12 +312,16 @@ async def process_q3(message: Message, state: FSMContext) -> None:
     answer = parse_yes_no(message.text or "")
     if answer is None:
         await message.answer(
-            "Пожалуйста, используй кнопки Да / Нет.", reply_markup=yes_no_keyboard()
+            "Пожалуйста, используй кнопки Да / Нет.",
+            reply_markup=yes_no_keyboard(),
         )
         return
 
     await state.update_data(q3=answer)
-    await message.answer(SURVEY_QUESTIONS["q4"], reply_markup=yes_no_keyboard())
+    await message.answer(
+        SURVEY_QUESTIONS["q4"],
+        reply_markup=yes_no_keyboard(),
+    )
     await state.set_state(SurveyStates.waiting_for_q4)
 
 
@@ -181,13 +330,14 @@ async def process_q4(message: Message, state: FSMContext) -> None:
     answer = parse_yes_no(message.text or "")
     if answer is None:
         await message.answer(
-            "Пожалуйста, используй кнопки Да / Нет.", reply_markup=yes_no_keyboard()
+            "Пожалуйста, используй кнопки Да / Нет.",
+            reply_markup=yes_no_keyboard(),
         )
         return
 
     await state.update_data(q4=answer)
     await message.answer(
-        "Введите комментарий к анкете или нажми 'Пропустить'.",
+        "Введите комментарий к анкете или нажмите «Пропустить».",
         reply_markup=skip_comment_keyboard(),
     )
     await state.set_state(SurveyStates.waiting_for_comment)

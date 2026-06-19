@@ -1,4 +1,4 @@
-from datetime import datetime, time, date
+from datetime import date, datetime, time
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -13,8 +13,8 @@ from app.db.repositories.survey_repository import SurveyRepository
 from app.db.repositories.user_repository import UserRepository
 from app.db.session import AsyncSessionLocal
 from app.services.auth_service import AuthService
-from app.services.report_service import ReportService
 from app.services.excel_report_service import ExcelReportService
+from app.services.report_service import ReportService
 
 router = Router()
 
@@ -60,6 +60,26 @@ def format_report_text(report) -> str:
     return "\n".join(lines)
 
 
+@router.message(
+    SuperuserReportStates.waiting_for_cafe_id,
+    F.text.in_({"Отмена", "/cancel", "Главное меню"}),
+)
+@router.message(
+    SuperuserReportStates.waiting_for_start_date,
+    F.text.in_({"Отмена", "/cancel", "Главное меню"}),
+)
+@router.message(
+    SuperuserReportStates.waiting_for_end_date,
+    F.text.in_({"Отмена", "/cancel", "Главное меню"}),
+)
+async def cancel_superuser_report(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer(
+        "Формирование отчёта отменено.",
+        reply_markup=superuser_main_keyboard(),
+    )
+
+
 @router.message(F.text == "Отчёт по кафе")
 async def start_superuser_report(message: Message, state: FSMContext) -> None:
     telegram_user = message.from_user
@@ -98,14 +118,14 @@ async def start_superuser_report(message: Message, state: FSMContext) -> None:
         await state.set_state(SuperuserReportStates.waiting_for_cafe_id)
 
 
-@router.message(
-    SuperuserReportStates.waiting_for_cafe_id,
-    F.text.in_({"Отмена", "/cancel"}),
-)
+@router.message(SuperuserReportStates.waiting_for_cafe_id)
 async def process_cafe_id(message: Message, state: FSMContext) -> None:
     text = (message.text or "").strip()
     if not text.isdigit():
-        await message.answer("Введите корректный числовой ID кафе.")
+        await message.answer(
+            "Введите корректный числовой ID кафе.",
+            reply_markup=cancel_keyboard(),
+        )
         return
 
     cafe_id = int(text)
@@ -115,7 +135,10 @@ async def process_cafe_id(message: Message, state: FSMContext) -> None:
         cafe = await cafe_repository.get_by_id(cafe_id)
 
         if cafe is None:
-            await message.answer("Кафе с таким ID не найдено.")
+            await message.answer(
+                "Кафе с таким ID не найдено.",
+                reply_markup=cancel_keyboard(),
+            )
             return
 
     await state.update_data(cafe_id=cafe_id)
@@ -126,14 +149,14 @@ async def process_cafe_id(message: Message, state: FSMContext) -> None:
     await state.set_state(SuperuserReportStates.waiting_for_start_date)
 
 
-@router.message(
-    SuperuserReportStates.waiting_for_start_date,
-    F.text.in_({"Отмена", "/cancel"}),
-)
+@router.message(SuperuserReportStates.waiting_for_start_date)
 async def process_start_date(message: Message, state: FSMContext) -> None:
     parsed_date = parse_date(message.text or "")
     if parsed_date is None:
-        await message.answer("Неверный формат даты. Используй ДД.ММ.ГГГГ")
+        await message.answer(
+            "Неверный формат даты. Используй ДД.ММ.ГГГГ",
+            reply_markup=cancel_keyboard(),
+        )
         return
 
     await state.update_data(start_date=parsed_date.isoformat())
@@ -144,14 +167,14 @@ async def process_start_date(message: Message, state: FSMContext) -> None:
     await state.set_state(SuperuserReportStates.waiting_for_end_date)
 
 
-@router.message(
-    SuperuserReportStates.waiting_for_end_date,
-    F.text.in_({"Отмена", "/cancel"}),
-)
+@router.message(SuperuserReportStates.waiting_for_end_date)
 async def process_end_date(message: Message, state: FSMContext) -> None:
     parsed_end_date = parse_date(message.text or "")
     if parsed_end_date is None:
-        await message.answer("Неверный формат даты. Используй ДД.ММ.ГГГГ")
+        await message.answer(
+            "Неверный формат даты. Используй ДД.ММ.ГГГГ",
+            reply_markup=cancel_keyboard(),
+        )
         return
 
     data = await state.get_data()
@@ -159,7 +182,10 @@ async def process_end_date(message: Message, state: FSMContext) -> None:
     cafe_id = data["cafe_id"]
 
     if parsed_end_date < start_date:
-        await message.answer("Дата конца периода не может быть раньше даты начала.")
+        await message.answer(
+            "Дата конца периода не может быть раньше даты начала.",
+            reply_markup=cancel_keyboard(),
+        )
         return
 
     start_datetime = datetime.combine(start_date, time.min)
@@ -199,12 +225,4 @@ async def process_end_date(message: Message, state: FSMContext) -> None:
     await message.answer_document(
         FSInputFile(excel_file_path),
         caption="Excel-отчёт по кафе готов.",
-    )
-
-
-async def cancel_superuser_report(message: Message, state: FSMContext) -> None:
-    await state.clear()
-    await message.answer(
-        "Формирование отчёта отменено.",
-        reply_markup=superuser_main_keyboard(),
     )

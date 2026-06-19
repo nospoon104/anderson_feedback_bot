@@ -21,3 +21,13 @@ def superuser_main_keyboard() -> ReplyKeyboardMarkup:
         ],
         resize_keyboard=True,
     )
+
+
+def main_menu_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Главное меню")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
