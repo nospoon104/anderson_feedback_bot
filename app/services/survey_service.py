@@ -30,7 +30,7 @@ class SurveyService:
             raise ValueError("Manager is not assigned to a cafe")
 
         if visit_datetime > datetime.now() + timedelta(hours=6):
-	    raise ValueError("Дата и время визита слишком далеко в будущем")
+            raise ValueError("Дата и время визита слишком далеко в будущем")
 
         if not (MIN_TABLE_NUMBER <= table_number <= MAX_TABLE_NUMBER):
             raise ValueError("Invalid table number")
@@ -78,6 +78,8 @@ class SurveyService:
         )
 
         return await self.survey_repository.create(survey_data)
+
+
 from datetime import datetime
 
 from app.core.constants import (

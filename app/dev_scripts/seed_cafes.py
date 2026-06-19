@@ -81,6 +81,11 @@ CAFES_TO_SEED = [
         "code": "cafe_tsaritsyno",
         "address": "-",
     },
+    {
+        "name": "АндерСон Фестиваль",
+        "code": "cafe_festival",
+        "address": "-",
+    },
 ]
 
 
