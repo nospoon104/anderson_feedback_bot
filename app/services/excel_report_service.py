@@ -190,7 +190,9 @@ class ExcelReportService:
         self._add_questions_sheet(workbook, report)
 
         cafes_ws = workbook.create_sheet(title="Cafes")
-        cafes_ws.append(["ID кафе", "Название кафе", "Анкет", "Средний процент"])
+        cafes_ws.append(
+            ["ID кафе", "Название кафе", "Анкет", "Средний процент", "Комментариев"]
+        )
         self._style_header(cafes_ws[1])
 
         for cafe in report.cafes:
@@ -200,10 +202,11 @@ class ExcelReportService:
                     cafe.cafe_name,
                     cafe.total_surveys,
                     cafe.average_percent,
+                    cafe.comments_count,
                 ]
             )
 
-        for column in ("A", "B", "C", "D"):
+        for column in ("A", "B", "C", "D", "E"):
             for cell in cafes_ws[column]:
                 cell.alignment = Alignment(vertical="top", wrap_text=True)
 

@@ -54,7 +54,10 @@ def format_network_report_text(report) -> str:
 
     for cafe in report.cafes:
         lines.append(
-            f"{cafe.cafe_id} — {cafe.cafe_name} — {cafe.total_surveys} анкет — {cafe.average_percent:.2f}%"
+            f"{cafe.cafe_id} — {cafe.cafe_name} — "
+            f"{cafe.total_surveys} анкет — "
+            f"{cafe.average_percent:.2f}% — "
+            f"комментариев: {cafe.comments_count}"
         )
 
     if report.ai_summary:

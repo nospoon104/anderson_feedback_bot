@@ -176,6 +176,7 @@ class ReportService:
 
         all_surveys: list[Survey] = []
         cafe_reports: list[CafeShortReportSchema] = []
+        network_ai_input: list[dict[str, object]] = []
 
         for cafe in cafes:
             cafe_surveys = await self.survey_repository.list_by_cafe_and_period(
@@ -183,9 +184,18 @@ class ReportService:
                 start_date=start_date,
                 end_date=end_date,
             )
+            cafe_comments = (
+                await self.survey_repository.list_comments_by_cafe_and_period(
+                    cafe_id=cafe.id,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            )
 
             all_surveys.extend(cafe_surveys)
+
             cafe_summary = self.calculate_summary(cafe_surveys)
+            comments_count = len(cafe_comments)
 
             cafe_reports.append(
                 CafeShortReportSchema(
@@ -193,8 +203,21 @@ class ReportService:
                     cafe_name=cafe.name,
                     total_surveys=cafe_summary.total_surveys,
                     average_percent=cafe_summary.average_percent,
+                    comments_count=comments_count,
                 )
             )
+
+            if cafe_comments or cafe_summary.total_surveys > 0:
+                network_ai_input.append(
+                    {
+                        "cafe_id": cafe.id,
+                        "cafe_name": cafe.name,
+                        "total_surveys": cafe_summary.total_surveys,
+                        "average_percent": cafe_summary.average_percent,
+                        "comments_count": comments_count,
+                        "comments": cafe_comments,
+                    }
+                )
 
         cafe_reports.sort(
             key=lambda cafe_report: (
@@ -205,20 +228,17 @@ class ReportService:
         )
 
         summary = self.calculate_summary(all_surveys)
-
         q1_stats = self.calculate_question_stats([survey.q1 for survey in all_surveys])
         q2_stats = self.calculate_question_stats([survey.q2 for survey in all_surveys])
         q3_stats = self.calculate_question_stats([survey.q3 for survey in all_surveys])
         q4_stats = self.calculate_question_stats([survey.q4 for survey in all_surveys])
 
-        network_comments = await self.survey_repository.list_network_comments_by_period(
-            start_date=start_date,
-            end_date=end_date,
-        )
-
         try:
             ai_summary = await self.ai_comment_service.analyze_network_comments(
-                network_comments
+                comments_by_cafe=network_ai_input,
+                network_average_percent=summary.average_percent,
+                total_cafes=len(cafes),
+                total_surveys=summary.total_surveys,
             )
         except Exception:
             ai_summary = (

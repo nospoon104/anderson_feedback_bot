@@ -1,5 +1,4 @@
 import json
-from collections import defaultdict
 
 import httpx
 
@@ -16,12 +15,10 @@ class AICommentService:
     @staticmethod
     def _normalize_comments(comments: list[str]) -> list[str]:
         normalized: list[str] = []
-
         for comment in comments:
             cleaned = comment.strip()
             if cleaned:
                 normalized.append(cleaned)
-
         return normalized
 
     @staticmethod
@@ -69,83 +66,102 @@ class AICommentService:
 
 Комментарии:
 {comments_block}
-        """.strip()
+""".strip()
 
     @staticmethod
-    def _normalize_network_comments(
-        comments_by_cafe: list[dict[str, str | int]],
-    ) -> list[dict[str, str | int]]:
-        normalized: list[dict[str, str | int]] = []
+    def _prepare_network_cafes(
+        comments_by_cafe: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        prepared: list[dict[str, object]] = []
 
         for item in comments_by_cafe:
-            comment = str(item["comment"]).strip()
-            if not comment:
-                continue
+            cafe_name = str(item["cafe_name"]).strip()
+            total_surveys = int(item["total_surveys"])
+            average_percent = float(item["average_percent"])
+            comments_count = int(item["comments_count"])
+            raw_comments = item.get("comments", [])
 
-            normalized.append(
+            comments: list[str] = []
+            if isinstance(raw_comments, list):
+                for comment in raw_comments:
+                    cleaned = str(comment).strip()
+                    if cleaned:
+                        comments.append(cleaned)
+
+            prepared.append(
                 {
-                    "cafe_id": item["cafe_id"],
-                    "cafe_name": str(item["cafe_name"]).strip(),
-                    "comment": comment,
+                    "cafe_id": int(item["cafe_id"]),
+                    "cafe_name": cafe_name,
+                    "total_surveys": total_surveys,
+                    "average_percent": average_percent,
+                    "comments_count": comments_count,
+                    "comments": comments,
                 }
             )
 
-        return normalized
+        return prepared
 
     @staticmethod
-    def _limit_network_comments(
-        comments_by_cafe: list[dict[str, str | int]],
-        max_comments_per_cafe: int = 20,
-        max_total_comments: int = 150,
-    ) -> list[dict[str, str | int]]:
-        grouped: dict[str, list[dict[str, str | int]]] = defaultdict(list)
+    def _build_network_prompt(
+        cafes: list[dict[str, object]],
+        network_average_percent: float,
+        total_cafes: int,
+        total_surveys: int,
+    ) -> str:
+        cafe_blocks: list[str] = []
 
-        for item in comments_by_cafe:
-            cafe_key = f'{item["cafe_id"]}:{item["cafe_name"]}'
-            if len(grouped[cafe_key]) < max_comments_per_cafe:
-                grouped[cafe_key].append(item)
+        for cafe in cafes:
+            comments = cafe["comments"]
+            comments_block = (
+                "\n".join(f"- {comment}" for comment in comments)
+                if comments
+                else "- Комментариев нет"
+            )
 
-        limited: list[dict[str, str | int]] = []
-        for items in grouped.values():
-            limited.extend(items)
+            cafe_blocks.append(
+                f"""Кафе: {cafe["cafe_name"]}
+- Количество анкет: {cafe["total_surveys"]}
+- Средний процент: {float(cafe["average_percent"]):.2f}%
+- Количество комментариев: {cafe["comments_count"]}
+Комментарии:
+{comments_block}"""
+            )
 
-        return limited[:max_total_comments]
-
-    @staticmethod
-    def _build_network_prompt(comments_by_cafe: list[dict[str, str | int]]) -> str:
-        grouped: dict[str, list[str]] = defaultdict(list)
-
-        for item in comments_by_cafe:
-            cafe_name = str(item["cafe_name"])
-            comment = str(item["comment"])
-            grouped[cafe_name].append(comment)
-
-        blocks: list[str] = []
-        for cafe_name, comments in grouped.items():
-            comment_lines = "\n".join(f"- {comment}" for comment in comments)
-            blocks.append(f"Кафе: {cafe_name}\nКомментарии:\n{comment_lines}")
-
-        comments_block = "\n\n".join(blocks)
+        cafes_block = "\n\n".join(cafe_blocks)
 
         return f"""
-Ты анализируешь комментарии гостей по всей сети ресторанов за выбранный период.
+Ты анализируешь отчёт по сети ресторанов за выбранный период.
 
-Тебе переданы комментарии с разбивкой по кафе.
-Нужно подготовить краткий, честный и полезный управленческий анализ для суперюзера сети.
+Ниже приведены данные по всей сети:
+- Количество кафе в отчёте: {total_cafes}
+- Общее количество анкет по сети: {total_surveys}
+- Средний процент по сети: {network_average_percent:.2f}%
+
+Также ниже приведены данные по каждому кафе:
+- количество анкет,
+- средний процент,
+- количество комментариев,
+- сами комментарии гостей.
+
+Твоя задача — сделать честный, полезный и краткий управленческий анализ для суперюзера сети.
 
 Требования:
 1. Не выдумывай факты.
-2. Не додумывай то, чего нет в комментариях.
-3. Опирайся только на комментарии из входных данных.
-4. Если комментариев мало, прямо скажи, что выборка ограничена.
-5. Отделяй общесетевые сигналы от локальных проблем конкретных кафе.
-6. Упоминай конкретные кафе только если в комментариях действительно есть основания обратить на них внимание.
-7. Если по кафе мало данных, не делай сильных выводов.
-8. Выдели повторяющиеся позитивные сигналы по сети.
-9. Выдели повторяющиеся проблемы по сети.
-10. Отдельно укажи кафе, которые требуют внимания руководителя, и объясни почему.
-11. Пиши кратко, структурно, по делу и на русском языке.
-12. Не используй расплывчатые формулировки без опоры на текст комментариев.
+2. Не додумывай то, чего нет во входных данных.
+3. Опирайся только на показатели и комментарии, которые переданы ниже.
+4. Если данных мало, прямо скажи, что выборка ограничена.
+5. Разделяй общесетевые сигналы и локальные проблемы конкретных кафе.
+6. Указывай кафе, требующие внимания, только если на это есть основания:
+   - низкий средний процент относительно сети,
+   - повторяющиеся жалобы,
+   - сочетание слабых метрик и негативных комментариев.
+7. Не делай жёстких выводов по кафе, если данных слишком мало.
+8. Если по кафе нет комментариев, не придумывай причины проблем.
+9. Выдели сильные стороны по сети.
+10. Выдели системные проблемы по сети.
+11. Отдельно укажи кафе, требующие внимания руководителя.
+12. Если кафе требует внимания, кратко объясни почему.
+13. Пиши по делу, кратко, структурно и на русском языке.
 
 Верни ответ СТРОГО в таком формате:
 
@@ -172,9 +188,9 @@ class AICommentService:
 Краткий вывод:
 - ...
 
-Комментарии по кафе:
-{comments_block}
-        """.strip()
+Данные по кафе:
+{cafes_block}
+""".strip()
 
     async def _request_ai(self, user_prompt: str, system_prompt: str) -> str:
         payload = {
@@ -191,7 +207,6 @@ class AICommentService:
             ],
             "temperature": 0.3,
         }
-
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -235,23 +250,37 @@ class AICommentService:
 
     async def analyze_network_comments(
         self,
-        comments_by_cafe: list[dict[str, str | int]],
+        comments_by_cafe: list[dict[str, object]],
+        network_average_percent: float,
+        total_cafes: int,
+        total_surveys: int,
     ) -> str:
-        normalized_comments = self._normalize_network_comments(comments_by_cafe)
-        limited_comments = self._limit_network_comments(normalized_comments)
+        cafes = self._prepare_network_cafes(comments_by_cafe)
 
-        if not limited_comments:
+        cafes_with_signal = [
+            cafe
+            for cafe in cafes
+            if cafe["total_surveys"] > 0 or cafe["comments_count"] > 0
+        ]
+
+        if not cafes_with_signal:
             return (
                 "AI-анализ комментариев по сети\n\n"
-                "За выбранный период нет комментариев для анализа по сети."
+                "За выбранный период нет данных для анализа по сети."
             )
 
         content = await self._request_ai(
-            user_prompt=self._build_network_prompt(limited_comments),
+            user_prompt=self._build_network_prompt(
+                cafes=cafes_with_signal,
+                network_average_percent=network_average_percent,
+                total_cafes=total_cafes,
+                total_surveys=total_surveys,
+            ),
             system_prompt=(
                 "Ты аккуратный аналитик клиентского опыта для сети ресторанов. "
                 "Готовишь управленческие выводы для суперюзера. "
-                "Отвечай кратко, структурно, честно и строго по входным комментариям на русском языке."
+                "Отвечай кратко, структурно, честно и строго по входным данным "
+                "на русском языке."
             ),
         )
 

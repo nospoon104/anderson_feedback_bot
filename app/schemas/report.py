@@ -53,6 +53,7 @@ class CafeShortReportSchema(BaseModel):
     cafe_name: str
     total_surveys: int
     average_percent: float
+    comments_count: int = 0
 
 
 class NetworkReportSchema(BaseModel):
