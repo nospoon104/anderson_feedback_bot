@@ -57,6 +57,9 @@ def format_network_report_text(report) -> str:
             f"{cafe.cafe_id} — {cafe.cafe_name} — {cafe.total_surveys} анкет — {cafe.average_percent:.2f}%"
         )
 
+    if report.ai_summary:
+        lines.extend(["", report.ai_summary])
+
     return "\n".join(lines)
 
 

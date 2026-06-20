@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Survey
+from app.db.models import Cafe, Survey
 from app.schemas.survey import SurveyCreateSchema
 
 
@@ -75,3 +75,29 @@ class SurveyRepository:
             .where(Survey.comment_text != "")
         )
         return list(result.scalars().all())
+
+    async def list_network_comments_by_period(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> list[dict[str, str | int]]:
+        result = await self.session.execute(
+            select(Cafe.id, Cafe.name, Survey.comment_text)
+            .join(Survey, Survey.cafe_id == Cafe.id)
+            .where(Survey.visit_datetime >= start_date)
+            .where(Survey.visit_datetime <= end_date)
+            .where(Survey.comment_text.is_not(None))
+            .where(Survey.comment_text != "")
+            .order_by(Cafe.id, Survey.visit_datetime.desc())
+        )
+
+        rows = result.all()
+
+        return [
+            {
+                "cafe_id": cafe_id,
+                "cafe_name": cafe_name,
+                "comment": comment_text,
+            }
+            for cafe_id, cafe_name, comment_text in rows
+        ]

@@ -211,6 +211,21 @@ class ReportService:
         q3_stats = self.calculate_question_stats([survey.q3 for survey in all_surveys])
         q4_stats = self.calculate_question_stats([survey.q4 for survey in all_surveys])
 
+        network_comments = await self.survey_repository.list_network_comments_by_period(
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        try:
+            ai_summary = await self.ai_comment_service.analyze_network_comments(
+                network_comments
+            )
+        except Exception:
+            ai_summary = (
+                "AI-анализ комментариев по сети\n\n"
+                "Не удалось выполнить AI-анализ комментариев для отчёта по сети."
+            )
+
         return NetworkReportSchema(
             period=ReportPeriodSchema(
                 start_date=start_date,
@@ -226,4 +241,5 @@ class ReportService:
             q3_stats=q3_stats,
             q4_stats=q4_stats,
             cafes=cafe_reports,
+            ai_summary=ai_summary,
         )

@@ -209,6 +209,19 @@ class ExcelReportService:
 
         self._auto_width(cafes_ws)
 
+        if report.ai_summary:
+            ai_ws = workbook.create_sheet(title="AI Summary")
+            ai_ws.append(["AI-анализ"])
+            self._style_header(ai_ws[1])
+
+            for line in report.ai_summary.splitlines():
+                ai_ws.append([line])
+
+            for cell in ai_ws["A"]:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+            self._auto_width(ai_ws)
+
         file_name = (
             f"network_report_"
             f"{report.period.start_date:%Y-%m-%d}_"

@@ -67,3 +67,4 @@ class NetworkReportSchema(BaseModel):
     q3_stats: QuestionStatsSchema
     q4_stats: QuestionStatsSchema
     cafes: list[CafeShortReportSchema]
+    ai_summary: str | None = None
