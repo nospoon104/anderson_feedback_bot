@@ -198,6 +198,19 @@ class ExcelReportService:
 
         self._freeze_top(ws, "A4")
 
+    @staticmethod
+    def _tag_label(tag: str) -> str:
+        labels = {
+            "positive": "Позитив",
+            "hall": "Зал",
+            "kitchen_food": "Кухня/блюда",
+            "kitchen_speed": "Кухня/скорость",
+            "service": "Сервис",
+            "bar": "Бар",
+            "general": "Общие",
+        }
+        return labels.get(tag, tag)
+
     def build_cafe_report_file(self, report: CafeReportSchema) -> str:
         workbook = Workbook()
 
@@ -453,6 +466,64 @@ class ExcelReportService:
         else:
             comments_ws.append([1, "Нет комментариев за выбранный период"])
 
+        tags_ws = workbook.create_sheet(title="Теги комментариев")
+        self._style_title(tags_ws, "A1", "Тегированные комментарии")
+        tags_ws.append([])
+
+        tags_ws.append(["№", "Комментарий", "Тональность", "Тег", "Краткая суть"])
+        self._style_header_row(tags_ws, 3)
+
+        if report.tagged_comments:
+            for index, item in enumerate(report.tagged_comments, start=1):
+                tags_ws.append(
+                    [
+                        index,
+                        item.comment,
+                        "Позитив" if item.sentiment == "positive" else "Негатив",
+                        self._tag_label(item.tag),
+                        item.short_reason,
+                    ]
+                )
+        else:
+            tags_ws.append([1, "Нет данных", "", "", ""])
+
+        negative_tags_ws = workbook.create_sheet(title="Негатив по тегам")
+        self._style_title(negative_tags_ws, "A1", "Негативные комментарии по тегам")
+        negative_tags_ws.append([])
+
+        negative_tags_ws.append(
+            [
+                "Тег",
+                "Текущий период, шт.",
+                "Текущий период, %",
+                "Предыдущий период, шт.",
+                "Предыдущий период, %",
+                "Разница, шт.",
+            ]
+        )
+        self._style_header_row(negative_tags_ws, 3)
+
+        current_negative_total = sum(item.count for item in report.negative_tag_summary)
+        previous_negative_total = sum(
+            item.count for item in report.previous_negative_tag_summary
+        )
+        previous_map = {
+            item.tag: item.count for item in report.previous_negative_tag_summary
+        }
+
+        for item in report.negative_tag_summary:
+            previous_count = previous_map.get(item.tag, 0)
+            negative_tags_ws.append(
+                [
+                    item.label,
+                    item.count,
+                    self._share_percent(item.count, current_negative_total),
+                    previous_count,
+                    self._share_percent(previous_count, previous_negative_total),
+                    item.count - previous_count,
+                ]
+            )
+
         ai_ws = workbook.create_sheet(title="AI-анализ")
         self._style_title(ai_ws, "A1", "AI-анализ комментариев")
         ai_ws.append([])
@@ -478,6 +549,8 @@ class ExcelReportService:
         self._freeze_top(dynamics_ws, "A5")
         self._freeze_top(comments_ws, "A4")
         self._freeze_top(ai_ws, "A4")
+        self._freeze_top(tags_ws, "A4")
+        self._freeze_top(negative_tags_ws, "A4")
 
         file_name = (
             f"cafe_report_{report.cafe_id}_"
@@ -744,6 +817,98 @@ class ExcelReportService:
 
         self._add_focus_sheet(workbook, report)
 
+        tags_ws = workbook.create_sheet(title="Теги комментариев")
+        self._style_title(tags_ws, "A1", "Тегированные комментарии по сети")
+        tags_ws.append([])
+
+        tags_ws.append(["№", "Комментарий", "Тональность", "Тег", "Краткая суть"])
+        self._style_header_row(tags_ws, 3)
+
+        if report.tagged_comments:
+            for index, item in enumerate(report.tagged_comments, start=1):
+                tags_ws.append(
+                    [
+                        index,
+                        item.comment,
+                        "Позитив" if item.sentiment == "positive" else "Негатив",
+                        self._tag_label(item.tag),
+                        item.short_reason,
+                    ]
+                )
+        else:
+            tags_ws.append([1, "Нет данных", "", "", ""])
+
+        negative_tags_ws = workbook.create_sheet(title="Негатив по тегам")
+        self._style_title(negative_tags_ws, "A1", "Негативные комментарии по сети")
+        negative_tags_ws.append([])
+
+        negative_tags_ws.append(
+            [
+                "Тег",
+                "Текущий период, шт.",
+                "Текущий период, %",
+                "Предыдущий период, шт.",
+                "Предыдущий период, %",
+                "Разница, шт.",
+            ]
+        )
+        self._style_header_row(negative_tags_ws, 3)
+
+        current_negative_total = sum(item.count for item in report.negative_tag_summary)
+        previous_negative_total = sum(
+            item.count for item in report.previous_negative_tag_summary
+        )
+        previous_map = {
+            item.tag: item.count for item in report.previous_negative_tag_summary
+        }
+
+        for item in report.negative_tag_summary:
+            previous_count = previous_map.get(item.tag, 0)
+            negative_tags_ws.append(
+                [
+                    item.label,
+                    item.count,
+                    self._share_percent(item.count, current_negative_total),
+                    previous_count,
+                    self._share_percent(previous_count, previous_negative_total),
+                    item.count - previous_count,
+                ]
+            )
+
+        by_cafe_tags_ws = workbook.create_sheet(title="По кафе и тегам")
+        self._style_title(by_cafe_tags_ws, "A1", "Негатив по кафе и тегам")
+        by_cafe_tags_ws.append([])
+
+        by_cafe_tags_ws.append(
+            [
+                "ID кафе",
+                "Кафе",
+                "Зал",
+                "Кухня/блюда",
+                "Кухня/скорость",
+                "Сервис",
+                "Бар",
+                "Общие",
+                "Всего негативных",
+            ]
+        )
+        self._style_header_row(by_cafe_tags_ws, 3)
+
+        for item in report.network_negative_by_cafe:
+            by_cafe_tags_ws.append(
+                [
+                    item.cafe_id,
+                    item.cafe_name,
+                    item.hall_count,
+                    item.kitchen_food_count,
+                    item.kitchen_speed_count,
+                    item.service_count,
+                    item.bar_count,
+                    item.general_count,
+                    item.total_negative_count,
+                ]
+            )
+
         ai_ws = workbook.create_sheet(title="AI-анализ")
         self._style_title(ai_ws, "A1", "AI-анализ по сети")
         ai_ws.append([])
@@ -769,6 +934,9 @@ class ExcelReportService:
         self._freeze_top(dynamics_ws, "A5")
         self._freeze_top(cafes_ws, "A4")
         self._freeze_top(ai_ws, "A4")
+        self._freeze_top(tags_ws, "A4")
+        self._freeze_top(negative_tags_ws, "A4")
+        self._freeze_top(by_cafe_tags_ws, "A4")
 
         file_name = (
             f"network_report_"

@@ -6,6 +6,15 @@ from app.core.config import settings
 
 
 class AICommentService:
+    NEGATIVE_TAGS = {
+        "hall": "Зал",
+        "kitchen_food": "Кухня/блюда",
+        "kitchen_speed": "Кухня/скорость",
+        "service": "Сервис",
+        "bar": "Бар",
+        "general": "Общие",
+    }
+
     def __init__(self) -> None:
         self.api_key = settings.ai_api_key
         self.base_url = settings.ai_base_url.rstrip("/")
@@ -24,6 +33,13 @@ class AICommentService:
     @staticmethod
     def _limit_comments(comments: list[str], max_comments: int = 100) -> list[str]:
         return comments[:max_comments]
+
+    @staticmethod
+    def _chunk_comments(comments: list[str], chunk_size: int = 20) -> list[list[str]]:
+        return [
+            comments[index : index + chunk_size]
+            for index in range(0, len(comments), chunk_size)
+        ]
 
     @staticmethod
     def _build_prompt(comments: list[str]) -> str:
@@ -192,6 +208,38 @@ class AICommentService:
 {cafes_block}
 """.strip()
 
+    @staticmethod
+    def _build_tagging_prompt(comments: list[str]) -> str:
+        comments_block = "\n".join(
+            f"{index}. {comment}" for index, comment in enumerate(comments, start=1)
+        )
+
+        return f"""
+Ты классифицируешь комментарии гостей ресторана.
+
+Для каждого комментария нужно вернуть JSON-объект с полями:
+- comment: исходный комментарий без изменений
+- sentiment: только "positive" или "negative"
+- tag:
+  - если sentiment="positive", ставь только "positive"
+  - если sentiment="negative", ставь только один из:
+    "hall", "kitchen_food", "kitchen_speed", "service", "bar", "general"
+- short_reason: короткая суть комментария на русском языке, до 8 слов
+
+Правила:
+1. Верни только JSON-массив.
+2. Никакого markdown, никаких пояснений, никакого текста вне JSON.
+3. Один комментарий = один объект.
+4. Если комментарий смешанный, выбери главный смысл.
+5. Если комментарий в целом хвалебный — sentiment="positive", tag="positive".
+6. Если комментарий негативный — обязательно один негативный tag из списка.
+7. Не выдумывай детали, которых нет в комментарии.
+8. Сохраняй исходный текст комментария в поле comment.
+
+Комментарии:
+{comments_block}
+""".strip()
+
     async def _request_ai(self, user_prompt: str, system_prompt: str) -> str:
         payload = {
             "model": self.model,
@@ -228,6 +276,84 @@ class AICommentService:
                 f"Unexpected AI response format: {json.dumps(data, ensure_ascii=False)}"
             ) from exc
 
+    @staticmethod
+    def _safe_parse_tagging_response(
+        response_text: str,
+        source_comments: list[str],
+    ) -> list[dict[str, str]]:
+        try:
+            parsed = json.loads(response_text)
+        except json.JSONDecodeError:
+            return [
+                {
+                    "comment": comment,
+                    "sentiment": "negative",
+                    "tag": "general",
+                    "short_reason": "Не удалось распознать автоматически",
+                }
+                for comment in source_comments
+            ]
+
+        if not isinstance(parsed, list):
+            return [
+                {
+                    "comment": comment,
+                    "sentiment": "negative",
+                    "tag": "general",
+                    "short_reason": "Некорректный формат AI-ответа",
+                }
+                for comment in source_comments
+            ]
+
+        normalized_items: list[dict[str, str]] = []
+
+        for index, comment in enumerate(source_comments):
+            if index >= len(parsed) or not isinstance(parsed[index], dict):
+                normalized_items.append(
+                    {
+                        "comment": comment,
+                        "sentiment": "negative",
+                        "tag": "general",
+                        "short_reason": "Комментарий не был классифицирован",
+                    }
+                )
+                continue
+
+            raw_item = parsed[index]
+
+            sentiment = str(raw_item.get("sentiment", "")).strip().lower()
+            tag = str(raw_item.get("tag", "")).strip().lower()
+            short_reason = str(raw_item.get("short_reason", "")).strip()
+
+            if sentiment not in {"positive", "negative"}:
+                sentiment = "negative"
+
+            if sentiment == "positive":
+                tag = "positive"
+            elif tag not in {
+                "hall",
+                "kitchen_food",
+                "kitchen_speed",
+                "service",
+                "bar",
+                "general",
+            }:
+                tag = "general"
+
+            if not short_reason:
+                short_reason = "Без краткого описания"
+
+            normalized_items.append(
+                {
+                    "comment": comment,
+                    "sentiment": sentiment,
+                    "tag": tag,
+                    "short_reason": short_reason,
+                }
+            )
+
+        return normalized_items
+
     async def analyze_comments(self, comments: list[str]) -> str:
         normalized_comments = self._normalize_comments(comments)
         limited_comments = self._limit_comments(normalized_comments)
@@ -247,6 +373,33 @@ class AICommentService:
         )
 
         return f"AI-анализ комментариев\n\n{content}"
+
+    async def tag_comments(self, comments: list[str]) -> list[dict[str, str]]:
+        normalized_comments = self._normalize_comments(comments)
+        limited_comments = self._limit_comments(normalized_comments, max_comments=120)
+
+        if not limited_comments:
+            return []
+
+        chunks = self._chunk_comments(limited_comments, chunk_size=20)
+        result: list[dict[str, str]] = []
+
+        for chunk in chunks:
+            response_text = await self._request_ai(
+                user_prompt=self._build_tagging_prompt(chunk),
+                system_prompt=(
+                    "Ты классифицируешь комментарии гостей ресторана. "
+                    "Возвращай только корректный JSON-массив без пояснений."
+                ),
+            )
+            result.extend(
+                self._safe_parse_tagging_response(
+                    response_text=response_text,
+                    source_comments=chunk,
+                )
+            )
+
+        return result
 
     async def analyze_network_comments(
         self,

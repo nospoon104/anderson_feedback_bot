@@ -86,6 +86,31 @@ class ReportDynamicsSchema(BaseModel):
     monthly_points: list[PeriodPointSchema] = Field(default_factory=list)
 
 
+class TaggedCommentSchema(BaseModel):
+    comment: str
+    sentiment: str
+    tag: str
+    short_reason: str
+
+
+class TagSummaryItemSchema(BaseModel):
+    tag: str
+    label: str
+    count: int
+
+
+class CafeTagSummaryItemSchema(BaseModel):
+    cafe_id: int
+    cafe_name: str
+    hall_count: int = 0
+    kitchen_food_count: int = 0
+    kitchen_speed_count: int = 0
+    service_count: int = 0
+    bar_count: int = 0
+    general_count: int = 0
+    total_negative_count: int = 0
+
+
 class CafeReportSchema(BaseModel):
     cafe_id: int
     period: ReportPeriodSchema
@@ -104,6 +129,11 @@ class CafeReportSchema(BaseModel):
         default_factory=list
     )
     dynamics: ReportDynamicsSchema | None = None
+    tagged_comments: list[TaggedCommentSchema] = Field(default_factory=list)
+    negative_tag_summary: list[TagSummaryItemSchema] = Field(default_factory=list)
+    previous_negative_tag_summary: list[TagSummaryItemSchema] = Field(
+        default_factory=list
+    )
 
 
 class CafeShortReportSchema(BaseModel):
@@ -136,3 +166,11 @@ class NetworkReportSchema(BaseModel):
         default_factory=list
     )
     dynamics: ReportDynamicsSchema | None = None
+    tagged_comments: list[TaggedCommentSchema] = Field(default_factory=list)
+    negative_tag_summary: list[TagSummaryItemSchema] = Field(default_factory=list)
+    previous_negative_tag_summary: list[TagSummaryItemSchema] = Field(
+        default_factory=list
+    )
+    network_negative_by_cafe: list[CafeTagSummaryItemSchema] = Field(
+        default_factory=list
+    )

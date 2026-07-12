@@ -7,6 +7,7 @@ from app.db.repositories.survey_repository import SurveyRepository
 from app.schemas.report import (
     CafeReportSchema,
     CafeShortReportSchema,
+    CafeTagSummaryItemSchema,
     DistributionComparisonItemSchema,
     NetworkReportSchema,
     PeriodPointSchema,
@@ -17,6 +18,8 @@ from app.schemas.report import (
     ReportPeriodSchema,
     ReportSummarySchema,
     ScoreDistributionSchema,
+    TagSummaryItemSchema,
+    TaggedCommentSchema,
 )
 from app.services.ai_comment_service import AICommentService
 
@@ -115,6 +118,81 @@ class ReportService:
             "25%": distribution.score_25_count,
             "0%": distribution.score_0_count,
         }
+
+    @staticmethod
+    def _negative_tag_labels() -> dict[str, str]:
+        return {
+            "hall": "Зал",
+            "kitchen_food": "Кухня/блюда",
+            "kitchen_speed": "Кухня/скорость",
+            "service": "Сервис",
+            "bar": "Бар",
+            "general": "Общие",
+        }
+
+    def _build_tag_summary(
+        self,
+        tagged_comments: list[TaggedCommentSchema],
+    ) -> list[TagSummaryItemSchema]:
+        labels = self._negative_tag_labels()
+        counts = {tag: 0 for tag in labels}
+
+        for item in tagged_comments:
+            if item.sentiment == "negative" and item.tag in counts:
+                counts[item.tag] += 1
+
+        return [
+            TagSummaryItemSchema(
+                tag=tag,
+                label=label,
+                count=counts[tag],
+            )
+            for tag, label in labels.items()
+        ]
+
+    def _build_network_negative_by_cafe(
+        self,
+        tagged_comments_by_cafe: list[dict[str, object]],
+    ) -> list[CafeTagSummaryItemSchema]:
+        rows: list[CafeTagSummaryItemSchema] = []
+
+        for item in tagged_comments_by_cafe:
+            cafe_id = int(item["cafe_id"])
+            cafe_name = str(item["cafe_name"])
+            tagged_comments = item["tagged_comments"]
+
+            counts = {
+                "hall": 0,
+                "kitchen_food": 0,
+                "kitchen_speed": 0,
+                "service": 0,
+                "bar": 0,
+                "general": 0,
+            }
+
+            for tagged in tagged_comments:
+                if tagged.sentiment == "negative" and tagged.tag in counts:
+                    counts[tagged.tag] += 1
+
+            rows.append(
+                CafeTagSummaryItemSchema(
+                    cafe_id=cafe_id,
+                    cafe_name=cafe_name,
+                    hall_count=counts["hall"],
+                    kitchen_food_count=counts["kitchen_food"],
+                    kitchen_speed_count=counts["kitchen_speed"],
+                    service_count=counts["service"],
+                    bar_count=counts["bar"],
+                    general_count=counts["general"],
+                    total_negative_count=sum(counts.values()),
+                )
+            )
+
+        rows.sort(
+            key=lambda row: (row.total_negative_count, row.cafe_name),
+            reverse=True,
+        )
+        return rows
 
     def _build_question_comparisons(
         self,
@@ -468,6 +546,31 @@ class ReportService:
             monthly_points=monthly_points,
         )
 
+        previous_tagged_comments: list[TaggedCommentSchema] = []
+
+        try:
+            tagged_comments_raw = await self.ai_comment_service.tag_comments(comments)
+            tagged_comments = [
+                TaggedCommentSchema(**item) for item in tagged_comments_raw
+            ]
+        except Exception:
+            tagged_comments = []
+
+        try:
+            previous_tagged_comments_raw = await self.ai_comment_service.tag_comments(
+                previous_comments
+            )
+            previous_tagged_comments = [
+                TaggedCommentSchema(**item) for item in previous_tagged_comments_raw
+            ]
+        except Exception:
+            previous_tagged_comments = []
+
+        negative_tag_summary = self._build_tag_summary(tagged_comments)
+        previous_negative_tag_summary = self._build_tag_summary(
+            previous_tagged_comments
+        )
+
         try:
             ai_summary = await self.ai_comment_service.analyze_comments(comments)
         except Exception:
@@ -495,6 +598,9 @@ class ReportService:
             question_comparisons=question_comparisons,
             distribution_comparisons=distribution_comparisons,
             dynamics=dynamics,
+            tagged_comments=tagged_comments,
+            negative_tag_summary=negative_tag_summary,
+            previous_negative_tag_summary=previous_negative_tag_summary,
         )
 
     async def build_network_report(
@@ -512,6 +618,10 @@ class ReportService:
         previous_all_surveys: list[Survey] = []
         previous_all_comments: list[str] = []
         cafe_reports: list[CafeShortReportSchema] = []
+        tagged_comments_all: list[TaggedCommentSchema] = []
+        previous_tagged_comments_all: list[TaggedCommentSchema] = []
+        tagged_comments_by_cafe: list[dict[str, object]] = []
+        network_ai_input: list[dict[str, object]] = []
 
         previous_start, previous_end = self.get_previous_period(start_date, end_date)
 
@@ -528,6 +638,25 @@ class ReportService:
                     end_date=end_date,
                 )
             )
+
+            try:
+                cafe_tagged_raw = await self.ai_comment_service.tag_comments(
+                    cafe_comments
+                )
+                cafe_tagged = [TaggedCommentSchema(**item) for item in cafe_tagged_raw]
+            except Exception:
+                cafe_tagged = []
+
+            tagged_comments_all.extend(cafe_tagged)
+
+            tagged_comments_by_cafe.append(
+                {
+                    "cafe_id": cafe.id,
+                    "cafe_name": cafe.name,
+                    "tagged_comments": cafe_tagged,
+                }
+            )
+
             previous_cafe_surveys = (
                 await self.survey_repository.list_by_cafe_and_period(
                     cafe_id=cafe.id,
@@ -559,6 +688,18 @@ class ReportService:
                 )
             )
 
+            if cafe_comments or cafe_summary.total_surveys > 0:
+                network_ai_input.append(
+                    {
+                        "cafe_id": cafe.id,
+                        "cafe_name": cafe.name,
+                        "total_surveys": cafe_summary.total_surveys,
+                        "average_percent": cafe_summary.average_percent,
+                        "comments_count": self._count_comments(cafe_comments),
+                        "comments": cafe_comments,
+                    }
+                )
+
         for cafe in cafes:
             comments = await self.survey_repository.list_comments_by_cafe_and_period(
                 cafe_id=cafe.id,
@@ -566,6 +707,16 @@ class ReportService:
                 end_date=previous_end,
             )
             previous_all_comments.extend(comments)
+
+            try:
+                previous_cafe_tagged_raw = await self.ai_comment_service.tag_comments(
+                    comments
+                )
+                previous_tagged_comments_all.extend(
+                    [TaggedCommentSchema(**item) for item in previous_cafe_tagged_raw]
+                )
+            except Exception:
+                pass
 
         cafe_reports.sort(
             key=lambda cafe_report: (
@@ -607,11 +758,24 @@ class ReportService:
             monthly_points=monthly_points,
         )
 
+        negative_tag_summary = self._build_tag_summary(tagged_comments_all)
+        previous_negative_tag_summary = self._build_tag_summary(
+            previous_tagged_comments_all
+        )
+        network_negative_by_cafe = self._build_network_negative_by_cafe(
+            tagged_comments_by_cafe
+        )
+
         try:
-            ai_summary = await self.ai_comment_service.analyze_comments(all_comments)
+            ai_summary = await self.ai_comment_service.analyze_network_comments(
+                comments_by_cafe=network_ai_input,
+                network_average_percent=summary.average_percent,
+                total_cafes=len(cafes),
+                total_surveys=summary.total_surveys,
+            )
         except Exception:
             ai_summary = (
-                "AI-анализ комментариев\n\n"
+                "AI-анализ комментариев по сети\n\n"
                 "Не удалось выполнить AI-анализ комментариев для этого отчёта."
             )
 
@@ -636,4 +800,8 @@ class ReportService:
             question_comparisons=question_comparisons,
             distribution_comparisons=distribution_comparisons,
             dynamics=dynamics,
+            tagged_comments=tagged_comments_all,
+            negative_tag_summary=negative_tag_summary,
+            previous_negative_tag_summary=previous_negative_tag_summary,
+            network_negative_by_cafe=network_negative_by_cafe,
         )
