@@ -19,10 +19,10 @@ class ExcelReportService:
         self.bad_fill = PatternFill("solid", fgColor="FDE9E7")
         self.warning_fill = PatternFill("solid", fgColor="FFF2CC")
 
-        self.header_font = Font(color="FFFFFF", bold=True)
+        self.header_font = Font(color="000000", bold=True)
         self.section_font = Font(bold=True)
         self.bold_font = Font(bold=True)
-        self.title_font = Font(bold=True, size=14)
+        self.title_font = Font(bold=True, size=14, color="000000")
 
         self.thin_border = Border(
             left=Side(style="thin", color="CCCCCC"),
@@ -1027,8 +1027,8 @@ class ExcelReportService:
             title="Комментарии по тегам по сети",
         )
 
-        ai_ws = workbook.create_sheet(title="AI-анализ")
-        self._style_title(ai_ws, "A1", "AI-анализ по сети")
+        ai_ws = workbook.create_sheet(title="AI-анализ комментариев")
+        self._style_title(ai_ws, "A1", "AI-анализ комментариев по сети")
         ai_ws.append([])
 
         ai_ws.append(["Базовый AI-анализ комментариев"])
@@ -1042,13 +1042,16 @@ class ExcelReportService:
         for line in ai_lines:
             ai_ws.append([line])
 
-        executive_start_row = ai_ws.max_row + 2
-        ai_ws.cell(
-            row=executive_start_row,
-            column=1,
-            value="Глубокий управленческий AI-анализ",
+        executive_ai_ws = workbook.create_sheet(title="Глубокий AI-анализ")
+        self._style_title(
+            executive_ai_ws,
+            "A1",
+            "Глубокий управленческий AI-анализ",
         )
-        self._style_header_row(ai_ws, executive_start_row)
+        executive_ai_ws.append([])
+
+        executive_ai_ws.append(["Управленческий AI-анализ сети"])
+        self._style_header_row(executive_ai_ws, 3)
 
         executive_lines = (
             report.executive_ai_summary.splitlines()
@@ -1056,7 +1059,7 @@ class ExcelReportService:
             else ["Глубокий AI-анализ недоступен."]
         )
         for line in executive_lines:
-            ai_ws.append([line])
+            executive_ai_ws.append([line])
 
         for ws in workbook.worksheets:
             self._style_data_area(ws)
@@ -1068,6 +1071,7 @@ class ExcelReportService:
         self._freeze_top(dynamics_ws, "A5")
         self._freeze_top(cafes_ws, "A4")
         self._freeze_top(ai_ws, "A4")
+        self._freeze_top(executive_ai_ws, "A4")
         self._freeze_top(tags_ws, "A4")
         self._freeze_top(negative_tags_ws, "A4")
         self._freeze_top(by_cafe_tags_ws, "A4")
