@@ -35,6 +35,51 @@ class ReportComparisonSchema(BaseModel):
     delta_percent_points: float
 
 
+class MetricDeltaSchema(BaseModel):
+    current_value: float
+    previous_value: float
+    delta_value: float
+
+
+class QuestionComparisonSchema(BaseModel):
+    question_key: str
+    question_label: str
+    current_yes_percent: float
+    previous_yes_percent: float
+    delta_percent_points: float
+
+
+class DistributionComparisonItemSchema(BaseModel):
+    label: str
+    current_count: int
+    previous_count: int
+    delta_count: int
+
+
+class PeriodPointSchema(BaseModel):
+    label: str
+    start_date: datetime
+    end_date: datetime
+    total_surveys: int
+    average_percent: float
+    comments_count: int
+
+
+class CafeComparisonItemSchema(BaseModel):
+    cafe_id: int
+    cafe_name: str
+    total_surveys: int
+    average_percent: float
+    comments_count: int
+    previous_average_percent: float
+    delta_percent_points: float
+
+
+class ReportDynamicsSchema(BaseModel):
+    weekly_points: list[PeriodPointSchema] = Field(default_factory=list)
+    monthly_points: list[PeriodPointSchema] = Field(default_factory=list)
+
+
 class CafeReportSchema(BaseModel):
     cafe_id: int
     period: ReportPeriodSchema
@@ -46,6 +91,13 @@ class CafeReportSchema(BaseModel):
     comparison: ReportComparisonSchema | None = None
     comments: list[str] = Field(default_factory=list)
     ai_summary: str | None = None
+    comments_count: int = 0
+    previous_comments_count: int = 0
+    question_comparisons: list[QuestionComparisonSchema] = Field(default_factory=list)
+    distribution_comparisons: list[DistributionComparisonItemSchema] = Field(
+        default_factory=list
+    )
+    dynamics: ReportDynamicsSchema | None = None
 
 
 class CafeShortReportSchema(BaseModel):
@@ -54,6 +106,8 @@ class CafeShortReportSchema(BaseModel):
     total_surveys: int
     average_percent: float
     comments_count: int = 0
+    previous_average_percent: float = 0.0
+    delta_percent_points: float = 0.0
 
 
 class NetworkReportSchema(BaseModel):
@@ -69,3 +123,10 @@ class NetworkReportSchema(BaseModel):
     q4_stats: QuestionStatsSchema
     cafes: list[CafeShortReportSchema]
     ai_summary: str | None = None
+    comments_count: int = 0
+    previous_comments_count: int = 0
+    question_comparisons: list[QuestionComparisonSchema] = Field(default_factory=list)
+    distribution_comparisons: list[DistributionComparisonItemSchema] = Field(
+        default_factory=list
+    )
+    dynamics: ReportDynamicsSchema | None = None
