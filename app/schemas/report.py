@@ -33,6 +33,12 @@ class ReportComparisonSchema(BaseModel):
     current_average_percent: float
     previous_average_percent: float
     delta_percent_points: float
+    current_total_surveys: int
+    previous_total_surveys: int
+    previous_period_start_date: datetime
+    previous_period_end_date: datetime
+    current_comments_count: int = 0
+    previous_comments_count: int = 0
 
 
 class MetricDeltaSchema(BaseModel):

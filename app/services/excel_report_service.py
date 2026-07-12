@@ -32,7 +32,9 @@ class ExcelReportService:
             cell.fill = self.header_fill
             cell.font = self.header_font
             cell.alignment = Alignment(
-                horizontal="center", vertical="center", wrap_text=True
+                horizontal="center",
+                vertical="center",
+                wrap_text=True,
             )
             cell.border = self.thin_border
 
@@ -47,14 +49,7 @@ class ExcelReportService:
             for cell in row:
                 if cell.value is not None:
                     cell.border = self.thin_border
-                    if cell.alignment is None:
-                        cell.alignment = Alignment(vertical="top", wrap_text=True)
-                    else:
-                        cell.alignment = Alignment(
-                            horizontal=cell.alignment.horizontal,
-                            vertical="top",
-                            wrap_text=True,
-                        )
+                    cell.alignment = Alignment(vertical="top", wrap_text=True)
 
     def _auto_width(self, worksheet) -> None:
         for column_cells in worksheet.columns:
@@ -67,10 +62,12 @@ class ExcelReportService:
                     max_length = len(value)
 
             worksheet.column_dimensions[column_letter].width = min(
-                max(max_length + 2, 12), 40
+                max(max_length + 2, 12),
+                45,
             )
 
-    def _freeze_top(self, worksheet, cell: str = "A2") -> None:
+    @staticmethod
+    def _freeze_top(worksheet, cell: str = "A2") -> None:
         worksheet.freeze_panes = cell
 
     def _style_kpi_table(self, worksheet, start_row: int, end_row: int) -> None:
@@ -78,11 +75,17 @@ class ExcelReportService:
             worksheet.cell(row=row, column=1).font = self.bold_font
             worksheet.cell(row=row, column=1).fill = self.subtle_fill
 
+    @staticmethod
+    def _share_percent(count: int, total: int) -> float:
+        if total <= 0:
+            return 0.0
+        return round(count / total * 100, 2)
+
     def build_cafe_report_file(self, report: CafeReportSchema) -> str:
         workbook = Workbook()
 
         summary_ws = workbook.active
-        summary_ws.title = "Summary"
+        summary_ws.title = "Сводка"
 
         summary_ws.append(["Показатель", "Значение"])
         self._style_header_row(summary_ws, 1)
@@ -90,17 +93,14 @@ class ExcelReportService:
         summary_ws.append(["Кафе ID", report.cafe_id])
         summary_ws.append(
             [
-                "Период",
+                "Текущий период",
                 f"{report.period.start_date:%d.%m.%Y} - {report.period.end_date:%d.%m.%Y}",
             ]
         )
-        summary_ws.append(["Всего анкет", report.summary.total_surveys])
+        summary_ws.append(["Анкет в текущем периоде", report.summary.total_surveys])
         summary_ws.append(["Средний балл", report.summary.average_score])
         summary_ws.append(["Средний процент", report.summary.average_percent])
-        summary_ws.append(["Комментариев", report.comments_count])
-        summary_ws.append(
-            ["Комментариев в прошлом периоде", report.previous_comments_count]
-        )
+        summary_ws.append(["Комментариев в текущем периоде", report.comments_count])
 
         if report.comparison is not None:
             summary_ws.append([])
@@ -109,22 +109,49 @@ class ExcelReportService:
             self._style_section_title(summary_ws.cell(summary_ws.max_row, 2))
 
             summary_ws.append(
-                ["Текущий средний процент", report.comparison.current_average_percent]
+                [
+                    "Предыдущий период",
+                    (
+                        f"{report.comparison.previous_period_start_date:%d.%m.%Y} - "
+                        f"{report.comparison.previous_period_end_date:%d.%m.%Y}"
+                    ),
+                ]
             )
             summary_ws.append(
                 [
-                    "Предыдущий средний процент",
+                    "Анкет в предыдущем периоде",
+                    report.comparison.previous_total_surveys,
+                ]
+            )
+            summary_ws.append(
+                [
+                    "Комментариев в предыдущем периоде",
+                    report.comparison.previous_comments_count,
+                ]
+            )
+            summary_ws.append(
+                ["Средний процент — текущий", report.comparison.current_average_percent]
+            )
+            summary_ws.append(
+                [
+                    "Средний процент — предыдущий",
                     report.comparison.previous_average_percent,
                 ]
             )
-            summary_ws.append(["Δ п.п.", report.comparison.delta_percent_points])
+            summary_ws.append(["Разница, п.п.", report.comparison.delta_percent_points])
+            summary_ws.append(
+                [
+                    "Примечание",
+                    "Сравнение интерпретировать с учётом разницы в количестве анкет между периодами.",
+                ]
+            )
 
         self._style_kpi_table(summary_ws, 2, summary_ws.max_row)
         self._freeze_top(summary_ws)
 
-        questions_ws = workbook.create_sheet(title="Questions")
+        questions_ws = workbook.create_sheet(title="Вопросы")
         questions_ws.append(
-            ["Вопрос", "Да", "Нет", "Да %", "Да % (пред. период)", "Δ п.п."]
+            ["Вопрос", "Да", "Нет", "Да %", "Да % (пред. период)", "Разница, п.п."]
         )
         self._style_header_row(questions_ws, 1)
 
@@ -153,35 +180,60 @@ class ExcelReportService:
 
         self._freeze_top(questions_ws)
 
-        distribution_ws = workbook.create_sheet(title="Distribution")
-        distribution_ws.append(["Оценка", "Текущий период", "Предыдущий период", "Δ"])
+        distribution_ws = workbook.create_sheet(title="Распределение")
+        distribution_ws.append(
+            [
+                "Оценка",
+                "Текущий период, шт.",
+                "Текущий период, %",
+                "Предыдущий период, шт.",
+                "Предыдущий период, %",
+                "Разница, п.п.",
+            ]
+        )
         self._style_header_row(distribution_ws, 1)
 
+        current_total = report.summary.total_surveys
+        previous_total = (
+            report.comparison.previous_total_surveys
+            if report.comparison is not None
+            else 0
+        )
+
         for item in report.distribution_comparisons:
+            current_share = self._share_percent(item.current_count, current_total)
+            previous_share = self._share_percent(item.previous_count, previous_total)
+
             distribution_ws.append(
                 [
                     item.label,
                     item.current_count,
+                    current_share,
                     item.previous_count,
-                    item.delta_count,
+                    previous_share,
+                    round(current_share - previous_share, 2),
                 ]
             )
 
         self._freeze_top(distribution_ws)
 
-        dynamics_ws = workbook.create_sheet(title="Dynamics")
-        dynamics_ws.append(["Недельная динамика", "", "", ""])
+        dynamics_ws = workbook.create_sheet(title="Динамика")
+        dynamics_ws.append(["Недельная динамика", "", "", "", ""])
         self._style_section_title(dynamics_ws["A1"])
 
-        dynamics_ws.append(["Период", "Анкет", "Средний %", "Комментариев"])
+        dynamics_ws.append(
+            ["Период", "Анкет", "Средний балл", "Средний %", "Комментариев"]
+        )
         self._style_header_row(dynamics_ws, 2)
 
         if report.dynamics is not None:
             for point in report.dynamics.weekly_points:
+                average_score = round(point.average_percent / 25, 2)
                 dynamics_ws.append(
                     [
                         point.label,
                         point.total_surveys,
+                        average_score,
                         point.average_percent,
                         point.comments_count,
                     ]
@@ -191,15 +243,19 @@ class ExcelReportService:
         dynamics_ws.cell(row=monthly_start_row, column=1, value="Месячная динамика")
         self._style_section_title(dynamics_ws.cell(row=monthly_start_row, column=1))
 
-        dynamics_ws.append(["Период", "Анкет", "Средний %", "Комментариев"])
+        dynamics_ws.append(
+            ["Период", "Анкет", "Средний балл", "Средний %", "Комментариев"]
+        )
         self._style_header_row(dynamics_ws, monthly_start_row + 1)
 
         if report.dynamics is not None:
             for point in report.dynamics.monthly_points:
+                average_score = round(point.average_percent / 25, 2)
                 dynamics_ws.append(
                     [
                         point.label,
                         point.total_surveys,
+                        average_score,
                         point.average_percent,
                         point.comments_count,
                     ]
@@ -207,7 +263,7 @@ class ExcelReportService:
 
         self._freeze_top(dynamics_ws)
 
-        comments_ws = workbook.create_sheet(title="Comments")
+        comments_ws = workbook.create_sheet(title="Комментарии")
         comments_ws.append(["Комментарий"])
         self._style_header_row(comments_ws, 1)
 
@@ -219,7 +275,7 @@ class ExcelReportService:
 
         self._freeze_top(comments_ws)
 
-        ai_ws = workbook.create_sheet(title="AI Summary")
+        ai_ws = workbook.create_sheet(title="AI-анализ")
         ai_ws.append(["AI-анализ"])
         self._style_header_row(ai_ws, 1)
 
@@ -250,32 +306,40 @@ class ExcelReportService:
         workbook = Workbook()
 
         summary_ws = workbook.active
-        summary_ws.title = "Summary"
+        summary_ws.title = "Сводка"
 
         summary_ws.append(["Показатель", "Значение"])
         self._style_header_row(summary_ws, 1)
 
         summary_ws.append(
             [
-                "Период",
+                "Текущий период",
                 f"{report.period.start_date:%d.%m.%Y} - {report.period.end_date:%d.%m.%Y}",
             ]
         )
         summary_ws.append(["Кафе в отчёте", report.total_cafes])
-        summary_ws.append(["Всего анкет", report.total_surveys])
+        summary_ws.append(["Анкет в текущем периоде", report.total_surveys])
         summary_ws.append(["Средний балл", report.average_score])
         summary_ws.append(["Средний процент", report.average_percent])
-        summary_ws.append(["Комментариев", report.comments_count])
+        summary_ws.append(["Комментариев в текущем периоде", report.comments_count])
+
+        summary_ws.append([])
+        summary_ws.append(["Примечание по сравнению", ""])
+        self._style_section_title(summary_ws.cell(summary_ws.max_row, 1))
+        self._style_section_title(summary_ws.cell(summary_ws.max_row, 2))
         summary_ws.append(
-            ["Комментариев в прошлом периоде", report.previous_comments_count]
+            [
+                "Логика сравнения",
+                "Для каждого кафе и показателя сравнение идёт с предыдущим периодом такой же длины, непосредственно предшествующим текущему.",
+            ]
         )
 
         self._style_kpi_table(summary_ws, 2, summary_ws.max_row)
         self._freeze_top(summary_ws)
 
-        questions_ws = workbook.create_sheet(title="Questions")
+        questions_ws = workbook.create_sheet(title="Вопросы")
         questions_ws.append(
-            ["Вопрос", "Да", "Нет", "Да %", "Да % (пред. период)", "Δ п.п."]
+            ["Вопрос", "Да", "Нет", "Да %", "Да % (пред. период)", "Разница, п.п."]
         )
         self._style_header_row(questions_ws, 1)
 
@@ -304,35 +368,70 @@ class ExcelReportService:
 
         self._freeze_top(questions_ws)
 
-        distribution_ws = workbook.create_sheet(title="Distribution")
-        distribution_ws.append(["Оценка", "Текущий период", "Предыдущий период", "Δ"])
+        distribution_ws = workbook.create_sheet(title="Распределение")
+        distribution_ws.append(
+            [
+                "Оценка",
+                "Текущий период, шт.",
+                "Текущий период, %",
+                "Предыдущий период, шт.",
+                "Предыдущий период, %",
+                "Разница, п.п.",
+            ]
+        )
         self._style_header_row(distribution_ws, 1)
 
+        previous_total = 0
+        current_total = report.total_surveys
+
+        current_distribution = {
+            "100%": report.distribution.score_100_count,
+            "75%": report.distribution.score_75_count,
+            "50%": report.distribution.score_50_count,
+            "25%": report.distribution.score_25_count,
+            "0%": report.distribution.score_0_count,
+        }
+
+        previous_distribution_map = {
+            item.label: item.previous_count for item in report.distribution_comparisons
+        }
+
+        previous_total = sum(previous_distribution_map.values())
+
         for item in report.distribution_comparisons:
+            current_share = self._share_percent(item.current_count, current_total)
+            previous_share = self._share_percent(item.previous_count, previous_total)
+
             distribution_ws.append(
                 [
                     item.label,
                     item.current_count,
+                    current_share,
                     item.previous_count,
-                    item.delta_count,
+                    previous_share,
+                    round(current_share - previous_share, 2),
                 ]
             )
 
         self._freeze_top(distribution_ws)
 
-        dynamics_ws = workbook.create_sheet(title="Dynamics")
-        dynamics_ws.append(["Недельная динамика сети", "", "", ""])
+        dynamics_ws = workbook.create_sheet(title="Динамика")
+        dynamics_ws.append(["Недельная динамика сети", "", "", "", ""])
         self._style_section_title(dynamics_ws["A1"])
 
-        dynamics_ws.append(["Период", "Анкет", "Средний %", "Комментариев"])
+        dynamics_ws.append(
+            ["Период", "Анкет", "Средний балл", "Средний %", "Комментариев"]
+        )
         self._style_header_row(dynamics_ws, 2)
 
         if report.dynamics is not None:
             for point in report.dynamics.weekly_points:
+                average_score = round(point.average_percent / 25, 2)
                 dynamics_ws.append(
                     [
                         point.label,
                         point.total_surveys,
+                        average_score,
                         point.average_percent,
                         point.comments_count,
                     ]
@@ -344,15 +443,19 @@ class ExcelReportService:
         )
         self._style_section_title(dynamics_ws.cell(row=monthly_start_row, column=1))
 
-        dynamics_ws.append(["Период", "Анкет", "Средний %", "Комментариев"])
+        dynamics_ws.append(
+            ["Период", "Анкет", "Средний балл", "Средний %", "Комментариев"]
+        )
         self._style_header_row(dynamics_ws, monthly_start_row + 1)
 
         if report.dynamics is not None:
             for point in report.dynamics.monthly_points:
+                average_score = round(point.average_percent / 25, 2)
                 dynamics_ws.append(
                     [
                         point.label,
                         point.total_surveys,
+                        average_score,
                         point.average_percent,
                         point.comments_count,
                     ]
@@ -360,7 +463,7 @@ class ExcelReportService:
 
         self._freeze_top(dynamics_ws)
 
-        cafes_ws = workbook.create_sheet(title="Cafes")
+        cafes_ws = workbook.create_sheet(title="Кафе")
         cafes_ws.append(
             [
                 "ID кафе",
@@ -368,7 +471,7 @@ class ExcelReportService:
                 "Анкет",
                 "Средний %",
                 "Средний % (пред. период)",
-                "Δ п.п.",
+                "Разница, п.п.",
                 "Комментариев",
             ]
         )
@@ -389,7 +492,7 @@ class ExcelReportService:
 
         self._freeze_top(cafes_ws)
 
-        ai_ws = workbook.create_sheet(title="AI Summary")
+        ai_ws = workbook.create_sheet(title="AI-анализ")
         ai_ws.append(["AI-анализ"])
         self._style_header_row(ai_ws, 1)
 

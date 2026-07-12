@@ -434,6 +434,12 @@ class ReportService:
                 summary.average_percent - previous_summary.average_percent,
                 2,
             ),
+            current_total_surveys=summary.total_surveys,
+            previous_total_surveys=previous_summary.total_surveys,
+            previous_period_start_date=previous_start,
+            previous_period_end_date=previous_end,
+            current_comments_count=self._count_comments(comments),
+            previous_comments_count=self._count_comments(previous_comments),
         )
 
         question_comparisons = self._build_question_comparisons(
