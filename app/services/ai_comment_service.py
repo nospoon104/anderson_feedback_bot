@@ -31,6 +31,10 @@ class AICommentService:
         return normalized
 
     @staticmethod
+    def _limit_text_items(items: list[str], max_items: int) -> list[str]:
+        return items[:max_items]
+
+    @staticmethod
     def _limit_comments(comments: list[str], max_comments: int = 100) -> list[str]:
         return comments[:max_comments]
 
@@ -208,6 +212,57 @@ class AICommentService:
 {cafes_block}
 """.strip()
 
+    async def analyze_network_executive_report(
+        self,
+        total_cafes: int,
+        total_surveys: int,
+        average_percent: float,
+        previous_total_surveys: int,
+        comments_count: int,
+        previous_comments_count: int,
+        question_comparisons: list[dict[str, object]],
+        weekly_points: list[dict[str, object]],
+        monthly_points: list[dict[str, object]],
+        negative_tag_summary: list[dict[str, object]],
+        previous_negative_tag_summary: list[dict[str, object]],
+        cafes: list[dict[str, object]],
+        negative_by_cafe: list[dict[str, object]],
+        representative_comments: list[str],
+    ) -> str:
+        if total_surveys == 0 and comments_count == 0:
+            return (
+                "Глубокий AI-анализ сети\n\n"
+                "За выбранный период нет данных для управленческого анализа."
+            )
+
+        limited_comments = self._limit_text_items(representative_comments, max_items=20)
+
+        content = await self._request_ai(
+            user_prompt=self._build_network_executive_prompt(
+                total_cafes=total_cafes,
+                total_surveys=total_surveys,
+                average_percent=average_percent,
+                previous_total_surveys=previous_total_surveys,
+                comments_count=comments_count,
+                previous_comments_count=previous_comments_count,
+                question_comparisons=question_comparisons,
+                weekly_points=weekly_points,
+                monthly_points=monthly_points,
+                negative_tag_summary=negative_tag_summary,
+                previous_negative_tag_summary=previous_negative_tag_summary,
+                cafes=cafes,
+                negative_by_cafe=negative_by_cafe,
+                representative_comments=limited_comments,
+            ),
+            system_prompt=(
+                "Ты аккуратный аналитик для управляющей команды сети ресторанов. "
+                "Готовишь краткий executive summary. "
+                "Отвечай строго по данным, кратко, честно, структурно, на русском языке."
+            ),
+        )
+
+        return f"Глубокий AI-анализ сети\n\n{content}"
+
     @staticmethod
     def _build_tagging_prompt(comments: list[str]) -> str:
         comments_block = "\n".join(
@@ -238,6 +293,143 @@ class AICommentService:
 
 Комментарии:
 {comments_block}
+""".strip()
+
+    def _build_network_executive_prompt(
+        self,
+        total_cafes: int,
+        total_surveys: int,
+        average_percent: float,
+        previous_total_surveys: int,
+        comments_count: int,
+        previous_comments_count: int,
+        question_comparisons: list[dict[str, object]],
+        weekly_points: list[dict[str, object]],
+        monthly_points: list[dict[str, object]],
+        negative_tag_summary: list[dict[str, object]],
+        previous_negative_tag_summary: list[dict[str, object]],
+        cafes: list[dict[str, object]],
+        negative_by_cafe: list[dict[str, object]],
+        representative_comments: list[str],
+    ) -> str:
+        question_block = "\n".join(
+            f"- {item['question_label']}: текущий={item['current_yes_percent']}%, "
+            f"предыдущий={item['previous_yes_percent']}%, "
+            f"дельта={item['delta_percent_points']} п.п."
+            for item in question_comparisons
+        )
+
+        weekly_block = "\n".join(
+            f"- {item['label']}: анкет={item['total_surveys']}, "
+            f"средний %={item['average_percent']}, комментариев={item['comments_count']}"
+            for item in weekly_points
+        )
+
+        monthly_block = "\n".join(
+            f"- {item['label']}: анкет={item['total_surveys']}, "
+            f"средний %={item['average_percent']}, комментариев={item['comments_count']}"
+            for item in monthly_points
+        )
+
+        current_tags_block = "\n".join(
+            f"- {item['label']}: {item['count']}" for item in negative_tag_summary
+        )
+
+        previous_tags_block = "\n".join(
+            f"- {item['label']}: {item['count']}"
+            for item in previous_negative_tag_summary
+        )
+
+        cafes_block = "\n".join(
+            f"- {item['cafe_name']}: анкет={item['total_surveys']}, "
+            f"средний %={item['average_percent']}, "
+            f"предыдущий %={item['previous_average_percent']}, "
+            f"дельта={item['delta_percent_points']} п.п., "
+            f"комментариев={item['comments_count']}"
+            for item in cafes
+        )
+
+        negative_by_cafe_block = "\n".join(
+            f"- {item['cafe_name']}: зал={item['hall_count']}, "
+            f"кухня/блюда={item['kitchen_food_count']}, "
+            f"кухня/скорость={item['kitchen_speed_count']}, "
+            f"сервис={item['service_count']}, "
+            f"бар={item['bar_count']}, "
+            f"общие={item['general_count']}, "
+            f"всего негативных={item['total_negative_count']}"
+            for item in negative_by_cafe
+        )
+
+        comments_block = "\n".join(
+            f"- {comment}" for comment in representative_comments
+        )
+
+        return f"""
+Ты готовишь краткий управленческий анализ для суперюзера сети ресторанов.
+
+Опирайся только на данные ниже. Не выдумывай факты и не додумывай причины, которых нет во входных данных.
+
+Данные по сети:
+- Кафе в отчёте: {total_cafes}
+- Анкет в текущем периоде: {total_surveys}
+- Анкет в предыдущем периоде: {previous_total_surveys}
+- Средний процент в текущем периоде: {average_percent}%
+- Комментариев в текущем периоде: {comments_count}
+- Комментариев в предыдущем периоде: {previous_comments_count}
+
+Сравнение по вопросам:
+{question_block}
+
+Недельная динамика:
+{weekly_block}
+
+Месячная динамика:
+{monthly_block}
+
+Негативные теги в текущем периоде:
+{current_tags_block}
+
+Негативные теги в предыдущем периоде:
+{previous_tags_block}
+
+Показатели по кафе:
+{cafes_block}
+
+Негатив по кафе и тегам:
+{negative_by_cafe_block}
+
+Показательные комментарии:
+{comments_block}
+
+Сделай краткий, честный и полезный управленческий анализ.
+Если данных мало, прямо скажи об этом.
+Если по отдельному кафе мало данных, не делай жёстких выводов.
+Выделяй только те проблемы, которые реально подтверждаются цифрами, тегами или комментариями.
+
+Верни ответ СТРОГО в таком формате:
+
+Ключевые управленческие сигналы:
+- ...
+- ...
+
+Что ухудшилось относительно предыдущего периода:
+- ...
+- ...
+
+Какие проблемы повторяются по сети:
+- ...
+- ...
+
+Какие кафе требуют внимания:
+- [Название кафе]: ...
+- [Название кафе]: ...
+
+Что проверить территориальным управляющим:
+- ...
+- ...
+
+Краткий вывод:
+- ...
 """.strip()
 
     async def _request_ai(self, user_prompt: str, system_prompt: str) -> str:

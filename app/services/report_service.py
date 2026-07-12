@@ -194,6 +194,30 @@ class ReportService:
         )
         return rows
 
+    @staticmethod
+    def _select_representative_comments(
+        tagged_comments: list[TaggedCommentSchema],
+        max_comments: int = 20,
+    ) -> list[str]:
+        selected: list[str] = []
+
+        negative_comments = [
+            item for item in tagged_comments if item.sentiment == "negative"
+        ]
+        positive_comments = [
+            item for item in tagged_comments if item.sentiment == "positive"
+        ]
+
+        for item in negative_comments[:15]:
+            prefix = f"[{item.cafe_name}] " if item.cafe_name else ""
+            selected.append(f"{prefix}{item.comment}")
+
+        for item in positive_comments[:5]:
+            prefix = f"[{item.cafe_name}] " if item.cafe_name else ""
+            selected.append(f"{prefix}{item.comment}")
+
+        return selected[:max_comments]
+
     def _build_question_comparisons(
         self,
         current_surveys: list[Survey],
@@ -769,6 +793,43 @@ class ReportService:
             tagged_comments_by_cafe
         )
 
+        representative_comments = self._select_representative_comments(
+            tagged_comments_all
+        )
+
+        try:
+            executive_ai_summary = (
+                await self.ai_comment_service.analyze_network_executive_report(
+                    total_cafes=len(cafes),
+                    total_surveys=summary.total_surveys,
+                    average_percent=summary.average_percent,
+                    previous_total_surveys=previous_summary.total_surveys,
+                    comments_count=self._count_comments(all_comments),
+                    previous_comments_count=self._count_comments(previous_all_comments),
+                    question_comparisons=[
+                        item.model_dump() for item in question_comparisons
+                    ],
+                    weekly_points=[item.model_dump() for item in weekly_points],
+                    monthly_points=[item.model_dump() for item in monthly_points],
+                    negative_tag_summary=[
+                        item.model_dump() for item in negative_tag_summary
+                    ],
+                    previous_negative_tag_summary=[
+                        item.model_dump() for item in previous_negative_tag_summary
+                    ],
+                    cafes=[item.model_dump() for item in cafe_reports],
+                    negative_by_cafe=[
+                        item.model_dump() for item in network_negative_by_cafe
+                    ],
+                    representative_comments=representative_comments,
+                )
+            )
+        except Exception:
+            executive_ai_summary = (
+                "Глубокий AI-анализ сети\n\n"
+                "Не удалось выполнить глубокий управленческий AI-анализ для этого отчёта."
+            )
+
         try:
             ai_summary = await self.ai_comment_service.analyze_network_comments(
                 comments_by_cafe=network_ai_input,
@@ -798,6 +859,7 @@ class ReportService:
             q4_stats=q4_stats,
             cafes=cafe_reports,
             ai_summary=ai_summary,
+            executive_ai_summary=executive_ai_summary,
             comments_count=self._count_comments(all_comments),
             previous_comments_count=self._count_comments(previous_all_comments),
             question_comparisons=question_comparisons,

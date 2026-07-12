@@ -1031,7 +1031,7 @@ class ExcelReportService:
         self._style_title(ai_ws, "A1", "AI-анализ по сети")
         ai_ws.append([])
 
-        ai_ws.append(["AI-анализ"])
+        ai_ws.append(["Базовый AI-анализ комментариев"])
         self._style_header_row(ai_ws, 3)
 
         ai_lines = (
@@ -1040,6 +1040,22 @@ class ExcelReportService:
             else ["AI-анализ недоступен."]
         )
         for line in ai_lines:
+            ai_ws.append([line])
+
+        executive_start_row = ai_ws.max_row + 2
+        ai_ws.cell(
+            row=executive_start_row,
+            column=1,
+            value="Глубокий управленческий AI-анализ",
+        )
+        self._style_header_row(ai_ws, executive_start_row)
+
+        executive_lines = (
+            report.executive_ai_summary.splitlines()
+            if report.executive_ai_summary
+            else ["Глубокий AI-анализ недоступен."]
+        )
+        for line in executive_lines:
             ai_ws.append([line])
 
         for ws in workbook.worksheets:

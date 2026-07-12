@@ -160,6 +160,7 @@ class NetworkReportSchema(BaseModel):
     q4_stats: QuestionStatsSchema
     cafes: list[CafeShortReportSchema]
     ai_summary: str | None = None
+    executive_ai_summary: str | None = None
     comments_count: int = 0
     previous_comments_count: int = 0
     question_comparisons: list[QuestionComparisonSchema] = Field(default_factory=list)
