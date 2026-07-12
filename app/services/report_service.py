@@ -643,7 +643,10 @@ class ReportService:
                 cafe_tagged_raw = await self.ai_comment_service.tag_comments(
                     cafe_comments
                 )
-                cafe_tagged = [TaggedCommentSchema(**item) for item in cafe_tagged_raw]
+                cafe_tagged = [
+                    TaggedCommentSchema(**item, cafe_name=cafe.name)
+                    for item in cafe_tagged_raw
+                ]
             except Exception:
                 cafe_tagged = []
 

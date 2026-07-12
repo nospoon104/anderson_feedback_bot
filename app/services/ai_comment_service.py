@@ -376,12 +376,11 @@ class AICommentService:
 
     async def tag_comments(self, comments: list[str]) -> list[dict[str, str]]:
         normalized_comments = self._normalize_comments(comments)
-        limited_comments = self._limit_comments(normalized_comments, max_comments=120)
 
-        if not limited_comments:
+        if not normalized_comments:
             return []
 
-        chunks = self._chunk_comments(limited_comments, chunk_size=20)
+        chunks = self._chunk_comments(normalized_comments, chunk_size=20)
         result: list[dict[str, str]] = []
 
         for chunk in chunks:

@@ -91,6 +91,7 @@ class TaggedCommentSchema(BaseModel):
     sentiment: str
     tag: str
     short_reason: str
+    cafe_name: str | None = None
 
 
 class TagSummaryItemSchema(BaseModel):

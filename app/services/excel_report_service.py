@@ -211,6 +211,102 @@ class ExcelReportService:
         }
         return labels.get(tag, tag)
 
+    def _tag_fill(self, tag: str) -> PatternFill:
+        fills = {
+            "positive": self.good_fill,
+            "hall": PatternFill("solid", fgColor="DDEBF7"),
+            "kitchen_food": PatternFill("solid", fgColor="FCE4D6"),
+            "kitchen_speed": PatternFill("solid", fgColor="FFF2CC"),
+            "service": PatternFill("solid", fgColor="F4CCCC"),
+            "bar": PatternFill("solid", fgColor="EADCF8"),
+            "general": PatternFill("solid", fgColor="E7E6E6"),
+        }
+        return fills.get(tag, self.subtle_fill)
+
+    @staticmethod
+    def _group_comments_by_tag(tagged_comments) -> dict[str, list[str]]:
+        grouped = {
+            "positive": [],
+            "hall": [],
+            "kitchen_food": [],
+            "kitchen_speed": [],
+            "service": [],
+            "bar": [],
+            "general": [],
+        }
+
+        for item in tagged_comments:
+            if item.tag in grouped:
+                grouped[item.tag].append(item.comment)
+
+        return grouped
+
+    @staticmethod
+    def _group_network_comments_by_tag(tagged_comments) -> dict[str, list[str]]:
+        grouped = {
+            "positive": [],
+            "hall": [],
+            "kitchen_food": [],
+            "kitchen_speed": [],
+            "service": [],
+            "bar": [],
+            "general": [],
+        }
+
+        for item in tagged_comments:
+            if item.tag in grouped:
+                prefix = (
+                    f"[{item.cafe_name}] " if getattr(item, "cafe_name", None) else ""
+                )
+                grouped[item.tag].append(f"{prefix}{item.comment}")
+
+        return grouped
+
+    def _fill_tag_columns_sheet(
+        self,
+        worksheet,
+        grouped_comments: dict[str, list[str]],
+        title: str,
+    ) -> None:
+        self._style_title(worksheet, "A1", title)
+        worksheet.append([])
+
+        tag_order = [
+            "positive",
+            "hall",
+            "kitchen_food",
+            "kitchen_speed",
+            "service",
+            "bar",
+            "general",
+        ]
+        headers = [self._tag_label(tag) for tag in tag_order]
+
+        worksheet.append(headers)
+        self._style_header_row(worksheet, 3)
+
+        for column_index, tag in enumerate(tag_order, start=1):
+            header_cell = worksheet.cell(row=3, column=column_index)
+            header_cell.fill = self._tag_fill(tag)
+
+        max_len = max((len(grouped_comments[tag]) for tag in tag_order), default=0)
+
+        for row_offset in range(max_len):
+            row_values: list[str] = []
+            for tag in tag_order:
+                comments = grouped_comments[tag]
+                row_values.append(
+                    comments[row_offset] if row_offset < len(comments) else ""
+                )
+            worksheet.append(row_values)
+
+        for column_index, tag in enumerate(tag_order, start=1):
+            fill = self._tag_fill(tag)
+            for row_index in range(4, worksheet.max_row + 1):
+                cell = worksheet.cell(row=row_index, column=column_index)
+                if cell.value:
+                    cell.fill = fill
+
     def build_cafe_report_file(self, report: CafeReportSchema) -> str:
         workbook = Workbook()
 
@@ -524,6 +620,14 @@ class ExcelReportService:
                 ]
             )
 
+        tag_columns_ws = workbook.create_sheet(title="Комментарии по тегам")
+        grouped_comments = self._group_comments_by_tag(report.tagged_comments)
+        self._fill_tag_columns_sheet(
+            worksheet=tag_columns_ws,
+            grouped_comments=grouped_comments,
+            title="Комментарии по тегам",
+        )
+
         ai_ws = workbook.create_sheet(title="AI-анализ")
         self._style_title(ai_ws, "A1", "AI-анализ комментариев")
         ai_ws.append([])
@@ -544,6 +648,7 @@ class ExcelReportService:
             self._auto_width(ws)
 
         self._freeze_top(summary_ws, "A4")
+        self._freeze_top(tag_columns_ws, "A4")
         self._freeze_top(questions_ws, "A4")
         self._freeze_top(distribution_ws, "A4")
         self._freeze_top(dynamics_ws, "A5")
@@ -821,7 +926,9 @@ class ExcelReportService:
         self._style_title(tags_ws, "A1", "Тегированные комментарии по сети")
         tags_ws.append([])
 
-        tags_ws.append(["№", "Комментарий", "Тональность", "Тег", "Краткая суть"])
+        tags_ws.append(
+            ["№", "Кафе", "Комментарий", "Тональность", "Тег", "Краткая суть"]
+        )
         self._style_header_row(tags_ws, 3)
 
         if report.tagged_comments:
@@ -829,6 +936,7 @@ class ExcelReportService:
                 tags_ws.append(
                     [
                         index,
+                        item.cafe_name or "",
                         item.comment,
                         "Позитив" if item.sentiment == "positive" else "Негатив",
                         self._tag_label(item.tag),
@@ -836,7 +944,7 @@ class ExcelReportService:
                     ]
                 )
         else:
-            tags_ws.append([1, "Нет данных", "", "", ""])
+            tags_ws.append([1, "", "Нет данных", "", "", ""])
 
         negative_tags_ws = workbook.create_sheet(title="Негатив по тегам")
         self._style_title(negative_tags_ws, "A1", "Негативные комментарии по сети")
@@ -909,6 +1017,16 @@ class ExcelReportService:
                 ]
             )
 
+        tag_columns_ws = workbook.create_sheet(title="Комментарии по тегам")
+        grouped_network_comments = self._group_network_comments_by_tag(
+            report.tagged_comments
+        )
+        self._fill_tag_columns_sheet(
+            worksheet=tag_columns_ws,
+            grouped_comments=grouped_network_comments,
+            title="Комментарии по тегам по сети",
+        )
+
         ai_ws = workbook.create_sheet(title="AI-анализ")
         self._style_title(ai_ws, "A1", "AI-анализ по сети")
         ai_ws.append([])
@@ -937,6 +1055,7 @@ class ExcelReportService:
         self._freeze_top(tags_ws, "A4")
         self._freeze_top(negative_tags_ws, "A4")
         self._freeze_top(by_cafe_tags_ws, "A4")
+        self._freeze_top(tag_columns_ws, "A4")
 
         file_name = (
             f"network_report_"
